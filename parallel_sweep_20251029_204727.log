@@ -1,0 +1,18 @@
+Configuration:
+MODES: ZO
+SCOPES: reduced full
+BATCH_SIZES: 2
+QUERY_BUDGETS: 8
+LEARNING_RATES_ZO: 1e-6
+EPOCHS: 10
+MAX_PARALLEL_JOBS: 32
+GPU_IDS: 2,3
+=========================================
+[0;34m📋 Generated 2 experiments[0m
+
+[0;34m🚀 Starting parallel execution...[0m
+
+[0;35m🔄 Started job 45688 for experiment 0:ZO:reduced:2:8:1e-6 on GPU 2[0m
+[0;35m🔄 Started job 45689 for experiment 1:ZO:full:2:8:1e-6 on GPU 3[0m
+[1;33m📊 Starting experiment: ZO_reduced_bs2_q8_lr1e-6 (GPU: 2)[0m
+[1;33m📊 Starting experiment: ZO_full_bs2_q8_lr1e-6 (GPU: 3)[0m

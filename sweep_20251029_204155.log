@@ -1,0 +1,52 @@
+'(MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /gpt2/resolve/main/tokenizer_config.json (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7f0fac621930>, 'Connection to huggingface.co timed out. (connect timeout=10)'))"), '(Request ID: 686eb30d-e155-4975-8d44-eef98e1c675e)')' thrown while requesting HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Retrying in 1s [Retry 1/5].
+'(MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /gpt2/resolve/main/tokenizer_config.json (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7f0fac621b40>, 'Connection to huggingface.co timed out. (connect timeout=10)'))"), '(Request ID: b5fb73be-a358-4c33-88b1-229d42515ea6)')' thrown while requesting HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Retrying in 2s [Retry 2/5].
+'(MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /gpt2/resolve/main/tokenizer_config.json (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7f0fac621e40>, 'Connection to huggingface.co timed out. (connect timeout=10)'))"), '(Request ID: fd0966ce-5a90-4e2d-b534-c3c866575733)')' thrown while requesting HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Retrying in 4s [Retry 3/5].
+'(MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /gpt2/resolve/main/tokenizer_config.json (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7f0fac622140>, 'Connection to huggingface.co timed out. (connect timeout=10)'))"), '(Request ID: f53f99c4-4844-4b50-9ff5-5cd273338ccb)')' thrown while requesting HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Retrying in 8s [Retry 4/5].
+'(MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /gpt2/resolve/main/tokenizer_config.json (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7f0fac622440>, 'Connection to huggingface.co timed out. (connect timeout=10)'))"), '(Request ID: 537b5eeb-cd4d-4833-9c84-d99f3b22c768)')' thrown while requesting HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Retrying in 8s [Retry 5/5].
+'(MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /gpt2/resolve/main/tokenizer_config.json (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x7f0fac622740>, 'Connection to huggingface.co timed out. (connect timeout=10)'))"), '(Request ID: 3316967b-00a5-4696-be51-c72998648b40)')' thrown while requesting HEAD https://huggingface.co/gpt2/resolve/main/tokenizer_config.json
+Using device: cuda
+Traceback (most recent call last):
+  File "/data/cdq/current_project/zo-test/reproduce_zo_paper.py", line 327, in <module>
+    train(
+  File "/data/cdq/current_project/zo-test/reproduce_zo_paper.py", line 193, in train
+    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/transformers/models/auto/tokenization_auto.py", line 1159, in from_pretrained
+    return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/transformers/tokenization_utils_base.py", line 2038, in from_pretrained
+    for template in list_repo_templates(
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/transformers/utils/hub.py", line 167, in list_repo_templates
+    return [
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/transformers/utils/hub.py", line 167, in <listcomp>
+    return [
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/huggingface_hub/hf_api.py", line 3191, in list_repo_tree
+    for path_info in paginate(path=tree_url, headers=headers, params={"recursive": recursive, "expand": expand}):
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/huggingface_hub/utils/_pagination.py", line 36, in paginate
+    r = session.get(path, params=params, headers=headers)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/requests/sessions.py", line 602, in get
+    return self.request("GET", url, **kwargs)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/huggingface_hub/utils/_http.py", line 95, in send
+    return super().send(request, *args, **kwargs)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/requests/adapters.py", line 667, in send
+    resp = conn.urlopen(
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/urllib3/connectionpool.py", line 464, in _make_request
+    self._validate_conn(conn)
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/urllib3/connectionpool.py", line 1093, in _validate_conn
+    conn.connect()
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/urllib3/connection.py", line 704, in connect
+    self.sock = sock = self._new_conn()
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/urllib3/connection.py", line 198, in _new_conn
+    sock = connection.create_connection(
+  File "/home/cdq/.conda/envs/flwr/lib/python3.10/site-packages/urllib3/util/connection.py", line 73, in create_connection
+    sock.connect(sa)
+KeyboardInterrupt

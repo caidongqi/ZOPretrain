@@ -1,0 +1,21 @@
+Configuration:
+MODES: ZO
+SCOPES: reduced full
+BATCH_SIZES: 1 2 4
+QUERY_BUDGETS: 1 2 4 8
+LEARNING_RATES_ZO: 1e-6
+EPOCHS: 1
+MAX_PARALLEL_JOBS: 
+GPU_IDS: 2 4
+=========================================
+[0;34m📋 Generated 24 experiments[0m
+
+[0;34m🚀 Starting parallel execution...[0m
+
+parallel_sweep.sh: line 245: [: 0: unary operator expected
+parallel_sweep.sh: line 245: [: 0: unary operator expected
+parallel_sweep.sh: line 245: [: 0: unary operator expected
+parallel_sweep.sh: line 245: [: 0: unary operator expected
+parallel_sweep.sh: line 245: [: 0: unary operator expected
+parallel_sweep.sh: line 245: [: 0: unary operator expected
+parallel_sweep.sh: line 245: [: 0: unary operator expected

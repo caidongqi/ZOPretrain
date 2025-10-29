@@ -1,0 +1,19 @@
+Configuration:
+MODES: ZO FO
+SCOPES: full
+BATCH_SIZES: 2
+QUERY_BUDGETS: 8
+LEARNING_RATES_ZO: 1e-6
+EPOCHS: 10
+MAX_PARALLEL_JOBS: 32
+GPU_IDS: 2,3
+=========================================
+[0;34m📋 Generated 2 experiments[0m
+
+[0;34m🚀 Starting parallel execution...[0m
+
+[0;35m🔄 Started job 35585 for experiment 0:ZO:full:2:8:1e-6 on GPU 2[0m
+[0;35m🔄 Started job 35586 for experiment 1:FO:full:2:N/A:1e-6 on GPU 3[0m
+[1;33m📊 Starting experiment: ZO_full_bs2_q8_lr1e-6 (GPU: 2)[0m
+tee: job_logs_20251029_210540/FO_full_bs2_qN/A_lr1e-6.log: No such file or directory
+[1;33m📊 Starting experiment: FO_full_bs2_qN/A_lr1e-6 (GPU: 3)[0m
