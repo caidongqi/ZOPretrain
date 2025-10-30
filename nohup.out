@@ -1,0 +1,36 @@
+[0;34m🚀 Starting ZO Optimizer Sweep[0m
+[0;34m==============================[0m
+Configuration:
+  - Mode: ZO (Zeroth-Order)
+  - Batch Size: 2
+  - Learning Rate: 1e-6
+  - Query Budget (q): 1
+  - Optimizers: adam, muon, bp (FO baseline)
+
+[0;34m🚀 Starting Parallel ZO vs FO Parameter Sweep[0m
+[0;34m============================================[0m
+Max parallel jobs: 2
+GPU IDs: 2,3
+Results will be saved to: results
+CSV logs will be saved to: csv_logs_mezo_epochs10_large
+Dataset cache: cache
+Log file: parallel_sweep_20251030_000350.log
+
+[0;34m🚀 Starting ZO Optimizer Sweep[0m
+[0;34m==============================[0m
+Configuration:
+  - Mode: ZO (Zeroth-Order)
+  - Batch Size: 2
+  - Learning Rate: 1e-6
+  - Query Budget (q): 1
+  - Optimizers: adam, muon, bp (FO baseline)
+
+[0;34m🚀 Starting Parallel ZO vs FO Parameter Sweep[0m
+[0;34m============================================[0m
+Max parallel jobs: 2
+GPU IDs: 2,3
+Results will be saved to: results
+CSV logs will be saved to: csv_logs_mezo_epochs10_large
+Dataset cache: cache
+Log file: parallel_sweep_20251030_000436.log
+

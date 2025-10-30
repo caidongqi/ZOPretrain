@@ -185,7 +185,26 @@ def zo_gradient_estimator(model, trainable_params, loss_fn, inputs, labels, q, e
 
 # --- 4. 训练循环 (Training Loops) ---
 
-def train(mode, scope, q, lr, epochs, batch_size, device, plot_file, csv_file=None, log_interval=10):
+def train(
+    mode,
+    scope,
+    q,
+    lr,
+    epochs,
+    batch_size,
+    device,
+    plot_file,
+    csv_file=None,
+    log_interval=10,
+    optimizer_name="adam",
+    weight_decay=0.0,
+    eps=1e-8,
+    betas=(0.9, 0.999),
+    muon_cautious=False,
+    muon_orthogonal_init=False,
+    muon_hidden_size=768,
+    zo_use_optimizer=False,
+):
     """主训练函数"""
     
     # 设置
@@ -210,7 +229,32 @@ def train(mode, scope, q, lr, epochs, batch_size, device, plot_file, csv_file=No
         p.requires_grad = True
 
     # 初始化优化器和损失函数
-    optimizer = torch.optim.Adam(trainable_params, lr=lr) if mode == 'FO' else None
+    optimizer = None
+    if mode == 'FO' or (mode == 'ZO' and zo_use_optimizer):
+        if optimizer_name == 'adam':
+            optimizer = torch.optim.Adam(
+                trainable_params,
+                lr=lr,
+                betas=betas,
+                eps=eps,
+                weight_decay=weight_decay,
+            )
+        elif optimizer_name == 'muon':
+            from optim_muon import AdamW as MuonAdamW
+            optimizer = MuonAdamW(
+                trainable_params,
+                lr=lr,
+                betas=betas,
+                eps=eps,
+                weight_decay=weight_decay,
+                correct_bias=True,
+                cautious=muon_cautious,
+                orthogonal_init=muon_orthogonal_init,
+                hidden_size=muon_hidden_size,
+                no_deprecation_warning=True,
+            )
+        else:
+            raise ValueError(f"Unknown optimizer: {optimizer_name}")
     loss_fn = CrossEntropyLoss()
     
     losses = []
@@ -256,11 +300,20 @@ def train(mode, scope, q, lr, epochs, batch_size, device, plot_file, csv_file=No
                         grad_norm_sq += float(torch.sum(g.detach() * g.detach()).item())
                 grad_norm = math.sqrt(grad_norm_sq)
                 
-                # 手动应用梯度更新 (Vanilla SGD step) - 按参数张量更新
-                for p, g in zip(trainable_params, grad_paramwise):
-                    if g is None:
-                        continue
-                    p.data -= lr * g
+                if zo_use_optimizer and optimizer is not None:
+                    # 使用选择的优化器进行基于 ZO 估计梯度的更新
+                    optimizer.zero_grad(set_to_none=True)
+                    for p, g in zip(trainable_params, grad_paramwise):
+                        if g is None:
+                            continue
+                        p.grad = g.to(p.device)
+                    optimizer.step()
+                else:
+                    # 手动应用梯度更新 (Vanilla SGD step)
+                    for p, g in zip(trainable_params, grad_paramwise):
+                        if g is None:
+                            continue
+                        p.data -= lr * g
 
             losses.append(loss.item())
             
@@ -306,6 +359,15 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size.")
     parser.add_argument("--csv_file", type=str, default=None, help="CSV file to save training logs.")
     parser.add_argument("--log_interval", type=int, default=10, help="Log interval for CSV (every N steps).")
+    # Optimizer selection and hyperparameters
+    parser.add_argument("--optimizer", type=str, default="adam", choices=["adam", "muon"], help="Optimizer to use for updates.")
+    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay.")
+    parser.add_argument("--eps", type=float, default=1e-8, help="Epsilon for numerical stability.")
+    parser.add_argument("--betas", type=float, nargs=2, default=[0.9, 0.999], help="Adam/Muon betas, two floats.")
+    parser.add_argument("--muon_cautious", action="store_true", help="Enable cautious mode for Muon.")
+    parser.add_argument("--muon_orthogonal_init", action="store_true", help="Orthogonal init for Muon (2D params).")
+    parser.add_argument("--muon_hidden_size", type=int, default=768, help="Hidden size used to reshape 1D params for Muon.")
+    parser.add_argument("--zo_use_optimizer", action="store_true", help="Use the chosen optimizer to apply ZO-estimated gradients.")
     
     args = parser.parse_args()
 
@@ -334,5 +396,13 @@ if __name__ == "__main__":
         device=device,
         plot_file=results_dir / plot_filename,
         csv_file=csv_file,
-        log_interval=args.log_interval
+        log_interval=args.log_interval,
+        optimizer_name=args.optimizer,
+        weight_decay=args.weight_decay,
+        eps=args.eps,
+        betas=tuple(args.betas),
+        muon_cautious=args.muon_cautious,
+        muon_orthogonal_init=args.muon_orthogonal_init,
+        muon_hidden_size=args.muon_hidden_size,
+        zo_use_optimizer=args.zo_use_optimizer,
     )

@@ -22,6 +22,9 @@ LEARNING_RATES_ZO=(1e-6)
 EPOCHS=10
 LOG_INTERVAL=10
 
+# 新增：优化器配置
+OPTIMIZERS=("adam" "muon")  # 可用的优化器列表
+
 # 并行配置
 MAX_PARALLEL_JOBS=32 # 最大并行任务数
 GPU_IDS="2,3"           # GPU ID列表，空表示自动检测
@@ -57,6 +60,10 @@ while [[ $# -gt 0 ]]; do
             IFS=',' read -ra LEARNING_RATES_ZO <<< "$2"
             shift 2
             ;;
+        --optimizers)
+            IFS=',' read -ra OPTIMIZERS <<< "$2"
+            shift 2
+            ;;
         --epochs)
             EPOCHS="$2"
             shift 2
@@ -75,6 +82,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --batch-sizes '1,2,4' 批次大小 (默认: 1,2,4)"
             echo "  --query-budgets '1,2,4,8' Query budget (默认: 1,2,4,8)"
             echo "  --learning-rates '1e-4,1e-5' 学习率 (默认: 3e-4)"
+            echo "  --optimizers 'adam,muon' 优化器 (默认: adam,muon)"
             echo "  --epochs N           训练轮数 (默认: 1)"
             echo "  --log-interval N     日志间隔 (默认: 10)"
             echo "  -h, --help           显示帮助信息"
@@ -140,15 +148,19 @@ generate_experiments() {
                 if [ "$mode" = "ZO" ]; then
                     for q in "${QUERY_BUDGETS[@]}"; do
                         for lr in "${LEARNING_RATES_ZO[@]}"; do
-                            experiments+=("$exp_id:$mode:$scope:$batch_size:$q:$lr")
-                            exp_id=$((exp_id + 1))
+                            for opt in "${OPTIMIZERS[@]}"; do
+                                experiments+=("$exp_id:$mode:$scope:$batch_size:$q:$lr:$opt")
+                                exp_id=$((exp_id + 1))
+                            done
                         done
                     done
                 else
                     # FO experiments
                     for lr in "${LEARNING_RATES_ZO[@]}"; do
-                        experiments+=("$exp_id:$mode:$scope:$batch_size:N/A:$lr")
-                        exp_id=$((exp_id + 1))
+                        for opt in "${OPTIMIZERS[@]}"; do
+                            experiments+=("$exp_id:$mode:$scope:$batch_size:N/A:$lr:$opt")
+                            exp_id=$((exp_id + 1))
+                        done
                     done
                 fi
             done
@@ -163,9 +175,9 @@ run_single_experiment() {
     local exp_config="$1"
     local gpu_id="$2"
     
-    IFS=':' read -r exp_id mode scope batch_size q lr <<< "$exp_config"
+    IFS=':' read -r exp_id mode scope batch_size q lr opt <<< "$exp_config"
     
-    local exp_name="${mode}_${scope}_bs${batch_size}_q${q}_lr${lr}"
+    local exp_name="${mode}_${scope}_bs${batch_size}_q${q}_lr${lr}_opt${opt}"
     local csv_file="${CSV_DIR}/${exp_name}.csv"
     local job_log="${JOB_LOG_DIR}/${exp_name}.log"
     
@@ -177,6 +189,7 @@ run_single_experiment() {
     cmd="$cmd --scope $scope"
     cmd="$cmd --batch_size $batch_size"
     cmd="$cmd --learning_rate $lr"
+    cmd="$cmd --optimizer $opt"
     cmd="$cmd --epochs $EPOCHS"
     cmd="$cmd --csv_file $csv_file"
     cmd="$cmd --log_interval $LOG_INTERVAL"
@@ -360,6 +373,7 @@ main() {
     echo "BATCH_SIZES: ${BATCH_SIZES[*]}" >> "$LOG_FILE"
     echo "QUERY_BUDGETS: ${QUERY_BUDGETS[*]}" >> "$LOG_FILE"
     echo "LEARNING_RATES_ZO: ${LEARNING_RATES_ZO[*]}" >> "$LOG_FILE"
+    echo "OPTIMIZERS: ${OPTIMIZERS[*]}" >> "$LOG_FILE"
     echo "EPOCHS: $EPOCHS" >> "$LOG_FILE"
     echo "MAX_PARALLEL_JOBS: $MAX_PARALLEL_JOBS" >> "$LOG_FILE"
     echo "GPU_IDS: $GPU_IDS" >> "$LOG_FILE"
