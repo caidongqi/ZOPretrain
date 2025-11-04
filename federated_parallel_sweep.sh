@@ -46,7 +46,7 @@ GPU_IDS="4,5"                        # 用于分配给客户端的 GPU 列表
 DEVICE="cuda"                        # client device: auto|cpu|cuda
 
 # 端口分配
-SERVER_BASE_PORT=8090                # 每个实验 +exp_id 偏移，避免并发冲突
+SERVER_BASE_PORT=8190                # 每个实验 +exp_id 偏移，避免并发冲突
 SERVER_HOST="127.0.0.1"             # Server 绑定主机
 
 # 其他
@@ -248,14 +248,12 @@ run_single_fl_experiment() {
     echo -e "${YELLOW}📡 Launching server: $address for $exp_name${NC}" | tee -a "$server_log"
 
     # 启动 Server（后台）
-    python federated/server_flower.py \
-        --address "$address" \
-        --rounds "$ROUNDS" \
-        --min_fit_clients "$MIN_FIT_CLIENTS" \
-        --min_available_clients "$MIN_AVAILABLE_CLIENTS" \
-        --fraction_fit "$FRACTION_FIT" \
-        --fraction_evaluate "$FRACTION_EVAL" \
-        >> "$server_log" 2>&1 &
+    # 根据模式决定是否启用服务端 ZO 更新
+    local server_cmd="python federated/server_flower.py --address $address --rounds $ROUNDS --min_fit_clients $MIN_FIT_CLIENTS --min_available_clients $MIN_AVAILABLE_CLIENTS --fraction_fit $FRACTION_FIT --fraction_evaluate $FRACTION_EVAL"
+    if [ "$mode" = "ZO" ]; then
+        server_cmd="$server_cmd --zo_server_side --zo_dir_count ${q#N/A} --zo_epsilon 1e-4 --zo_server_lr $lr"
+    fi
+    eval $server_cmd >> "$server_log" 2>&1 &
     local server_pid=$!
 
     # 给 server 一点时间启动监听

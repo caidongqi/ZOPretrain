@@ -111,3 +111,27 @@ Results dir: results, Job logs: fl_job_logs_20251102_165109
 [0;35m👤 Starting client 0 on GPU 4[0m
 [0;35m👤 Starting client 0 on GPU 4[0m
 federated_parallel_sweep.sh: line 372: cannot create temp file for here-document: No space left on device
+[0;34m🚀 Starting Federated Parallel Sweep[0m
+GPUs: 6 7
+Max parallel jobs: 8
+Rounds: 5, Num clients: 1
+Results dir: results, Job logs: fl_job_logs_20251103_162759
+[0;34m📋 Generated 6 experiments[0m
+[0;35m🔄 Started job 53575 for exp 0:ZO:full:2:1:1e-6:adam[0m
+[0;35m🔄 Started job 53576 for exp 1:ZO:full:2:1:1e-6:muon[0m
+[0;35m🔄 Started job 53578 for exp 2:ZO:full:2:1:1e-6:sgd[0m
+[0;35m🔄 Started job 53580 for exp 3:ZO:full:2:2:1e-6:adam[0m
+[0;35m🔄 Started job 53582 for exp 4:ZO:full:2:2:1e-6:muon[0m
+[0;35m🔄 Started job 53583 for exp 5:ZO:full:2:2:1e-6:sgd[0m
+[1;33m📡 Launching server: 127.0.0.1:8190 for FL_ZO_adam_full_n1_q1_lr1e-6_e5_bs2[0m
+[1;33m📡 Launching server: 127.0.0.1:8191 for FL_ZO_muon_full_n1_q1_lr1e-6_e5_bs2[0m
+[1;33m📡 Launching server: 127.0.0.1:8192 for FL_ZO_sgd_full_n1_q1_lr1e-6_e5_bs2[0m
+[1;33m📡 Launching server: 127.0.0.1:8194 for FL_ZO_muon_full_n1_q2_lr1e-6_e5_bs2[0m
+[1;33m📡 Launching server: 127.0.0.1:8195 for FL_ZO_sgd_full_n1_q2_lr1e-6_e5_bs2[0m
+[1;33m📡 Launching server: 127.0.0.1:8193 for FL_ZO_adam_full_n1_q2_lr1e-6_e5_bs2[0m
+[0;35m👤 Starting client 0 on GPU 6[0m
+[0;35m👤 Starting client 0 on GPU 6[0m
+[0;35m👤 Starting client 0 on GPU 6[0m
+[0;35m👤 Starting client 0 on GPU 6[0m
+[0;35m👤 Starting client 0 on GPU 6[0m
+[0;35m👤 Starting client 0 on GPU 6[0m

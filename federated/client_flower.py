@@ -178,6 +178,65 @@ class ZOFLClient(fl.client.NumPyClient):
         step_count = 0
         server_round = int(config.get('server_round', self.round_idx + 1))
 
+        # Server-side ZO path: clients do NOT update params; only report directional derivatives
+        if (self.mode == 'ZO') and bool(config.get('zo_server_side', False)):
+            epsilon = float(config.get('zo_epsilon', 1e-4))
+            dir_seeds = list(config.get('zo_dir_seeds', []))
+            eval_steps = int(config.get('zo_eval_steps', 1))
+
+            def _loss_with_perturb(sign: float, dirs: List[torch.Tensor]) -> float:
+                # apply
+                for p, u in zip(self.trainable_params, dirs):
+                    p.data.add_(sign * epsilon * u.to(p.device))
+                try:
+                    self.model.eval()
+                    total = 0.0
+                    steps = 0
+                    with torch.no_grad():
+                        for batch in self.trainloader:
+                            inputs = batch.to(self.device)
+                            labels = inputs.clone()
+                            logits = self.model(inputs).logits
+                            loss = self.loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
+                            total += float(loss.item())
+                            steps += 1
+                            if steps >= eval_steps:
+                                break
+                    return total / max(steps, 1)
+                finally:
+                    # revert
+                    for p, u in zip(self.trainable_params, dirs):
+                        p.data.add_(-sign * epsilon * u.to(p.device))
+                    self.model.train()
+
+            # build param-shape-aligned directions per seed
+            g_dir_list: List[float] = []
+            for seed in dir_seeds:
+                gen = torch.Generator(device=self.device if self.device == 'cuda' else 'cpu').manual_seed(int(seed))
+                dirs: List[torch.Tensor] = []
+                for p in self.trainable_params:
+                    u = torch.randn_like(p.data, generator=gen)
+                    dirs.append(u)
+                lp = _loss_with_perturb(+1.0, dirs)
+                lm = _loss_with_perturb(-1.0, dirs)
+                g_dir = (lp - lm) / (2.0 * epsilon)
+                g_dir_list.append(float(g_dir))
+
+            metrics = {
+                "client_id": self.client_id,
+                "train_time_s": time.time() - start_time,
+                "avg_loss": 0.0,
+                "steps": step_count,
+                "mode": self.mode,
+                "q": self.q if self.mode == 'ZO' else -1,
+                "round": server_round,
+                "lr": self.lr,
+                "zo_dir_g_json": json.dumps(g_dir_list),
+            }
+            self.round_idx = server_round
+            # return parameters unchanged
+            return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+
         # Local training
         epsilon = 1e-4
         for epoch in range(1, self.local_epochs + 1):
@@ -270,6 +329,7 @@ class ZOFLClient(fl.client.NumPyClient):
             "mode": self.mode,
             "q": self.q if self.mode == 'ZO' else -1,
             "round": server_round,
+            "lr": self.lr,
         }
 
         # 更新本地轮次索引
