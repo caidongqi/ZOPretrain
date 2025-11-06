@@ -1,0 +1,93 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FL Server (ZO server-side, no init broadcast)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "/data/pc/ZOPretrain/federated/server_flower.py",
+      "cwd": "/data/pc/ZOPretrain",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "subProcess": true,
+      "args": [
+        "--address", "0.0.0.0:8288",
+        "--rounds", "10",
+        "--min_fit_clients", "1",
+        "--min_available_clients", "1",
+        "--fraction_fit", "1.0",
+        "--fraction_evaluate", "0.0",
+        "--zo_server_side",
+        "--zo_dir_count", "1",
+        "--zo_epsilon", "1e-4",
+        "--zo_server_lr", "1e-6",
+        "--server_optimizer", "sgd",
+        "--server_device", "cuda",
+        "--server_gpu", "0",
+        "--round_timeout", "300",
+        "--no_init_params",
+      ],
+      "env": {
+        "PYTHONPATH": "/data/pc/ZOPretrain",
+        "CUDA_VISIBLE_DEVICES": "4",
+        "FLWR_LOGLEVEL": "DEBUG",
+        "NO_PROXY": "127.0.0.1,localhost",
+        "no_proxy": "127.0.0.1,localhost",
+        "GRPC_ENABLE_HTTP_PROXY": "0",
+        "GRPC_MAX_SEND_MESSAGE_LENGTH": "2147483647",
+        "GRPC_MAX_RECEIVE_MESSAGE_LENGTH": "2147483647"
+      }
+    },
+    {
+      "name": "FL Client 0 (ZO only)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "/data/pc/ZOPretrain/federated/client_flower.py",
+      "cwd": "/data/pc/ZOPretrain",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "subProcess": true,
+      "preLaunchTask": "wait-for-flower-8288",
+      "args": [
+        "--server", "127.0.0.1:8288",
+        "--client_id", "0",
+        "--num_clients", "1",
+        "--mode", "FO",
+        "--scope", "reduced",
+        "--q", "1",
+        "--lr", "1e-6",
+        "--local_epochs", "1",
+        "--local_steps", "1",
+        "--batch_size", "2",
+        "--block_size", "64",
+        "--cache_dir", "cache",
+        "--sample_count", "16",
+        "--device", "cuda",
+        "--gpu", "0",
+        "--log_interval", "50"
+      ],
+      "env": {
+        "PYTHONPATH": "/data/pc/ZOPretrain",
+        "CUDA_VISIBLE_DEVICES": "4",
+        "FLWR_LOGLEVEL": "DEBUG",
+        "NO_PROXY": "127.0.0.1,localhost",
+        "no_proxy": "127.0.0.1,localhost",
+        "GRPC_ENABLE_HTTP_PROXY": "0",
+        "GRPC_MAX_SEND_MESSAGE_LENGTH": "2147483647",
+        "GRPC_MAX_RECEIVE_MESSAGE_LENGTH": "2147483647"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "FL ZO: Server + Client 0",
+      "configurations": [
+        "FL Server (ZO server-side, no init broadcast)",
+        "FL Client 0 (ZO only)"
+      ],
+      "stopAll": true
+    }
+  ]
+}
