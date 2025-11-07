@@ -131,7 +131,12 @@ def zo_gradient_estimator(model, trainable_params, loss_fn, inputs, labels, q, e
 
     def f_loss():
         logits = model(inputs).logits
-        return loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
+        return loss_fn(
+            shift_logits.reshape(-1, shift_logits.size(-1)),
+            shift_labels.reshape(-1),
+        )
 
     # 累加“投影标量 g_i”与其对应的方向种子，节省显存
     seeds = []
@@ -279,7 +284,12 @@ def train(
             if mode == 'FO':
                 optimizer.zero_grad()
                 logits = model(inputs).logits
-                loss = loss_fn(logits.view(-1, logits.size(-1)), labels.view(-1))
+                shift_logits = logits[..., :-1, :].contiguous()
+                shift_labels = labels[..., 1:].contiguous()
+                loss = loss_fn(
+                    shift_logits.reshape(-1, shift_logits.size(-1)),
+                    shift_labels.reshape(-1),
+                )
                 loss.backward()
                 optimizer.step()
             
@@ -287,7 +297,12 @@ def train(
                 # 在更新前计算当前步的损失用于记录
                 with torch.no_grad():
                     current_logits = model(inputs).logits
-                    loss = loss_fn(current_logits.view(-1, current_logits.size(-1)), labels.view(-1))
+                    shift_logits = current_logits[..., :-1, :].contiguous()
+                    shift_labels = labels[..., 1:].contiguous()
+                    loss = loss_fn(
+                        shift_logits.reshape(-1, shift_logits.size(-1)),
+                        shift_labels.reshape(-1),
+                    )
 
                 # 使用 ZO 估计梯度
                 epsilon = 1e-4 # 增大扰动大小以提高数值稳定性
