@@ -135,3 +135,10 @@ Results dir: results, Job logs: fl_job_logs_20251103_162759
 [0;35m👤 Starting client 0 on GPU 6[0m
 [0;35m👤 Starting client 0 on GPU 6[0m
 [0;35m👤 Starting client 0 on GPU 6[0m
+Total experiments: 6
+Assigning GPUs [2,3] to instruct:sgd (port 8300)
+Assigning GPUs [5] to server_zo:sgd (port 8301)
+
+=== [1/6] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
+
+=== [2/6] Running server_zo mode with sgd optimizer on 127.0.0.1:8301 ===

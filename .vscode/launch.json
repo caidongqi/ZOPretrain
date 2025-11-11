@@ -12,25 +12,21 @@
       "justMyCode": true,
       "subProcess": true,
       "args": [
-        "--address", "0.0.0.0:8288",
+        "--address", "0.0.0.0:8258",
         "--rounds", "10",
         "--min_fit_clients", "1",
         "--min_available_clients", "1",
         "--fraction_fit", "1.0",
         "--fraction_evaluate", "0.0",
-        "--zo_server_side",
-        "--zo_dir_count", "1",
-        "--zo_epsilon", "1e-4",
-        "--zo_server_lr", "1e-6",
-        "--server_optimizer", "sgd",
-        "--server_device", "cuda",
-        "--server_gpu", "0",
-        "--round_timeout", "300",
-        "--no_init_params",
+        "--server_zo_enable",
+        "--server_zo_dir_count", "3",
+        "--server_zo_epsilon", "1e-4",
+        "--server_zo_lr", "1e-6",
+        "--device", "cuda"
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "4",
+        "CUDA_VISIBLE_DEVICES": "6",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
@@ -49,14 +45,14 @@
       "internalConsoleOptions": "neverOpen",
       "justMyCode": true,
       "subProcess": true,
-      "preLaunchTask": "wait-for-flower-8288",
+      "preLaunchTask": "wait-for-flower-8258",
       "args": [
-        "--server", "127.0.0.1:8288",
+        "--server", "127.0.0.1:8258",
         "--client_id", "0",
         "--num_clients", "1",
-        "--mode", "FO",
+        "--mode", "ZO",
         "--scope", "reduced",
-        "--q", "1",
+        "--client_zo_q", "3",
         "--lr", "1e-6",
         "--local_epochs", "1",
         "--local_steps", "1",
@@ -65,12 +61,132 @@
         "--cache_dir", "cache",
         "--sample_count", "16",
         "--device", "cuda",
-        "--gpu", "0",
         "--log_interval", "50"
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "4",
+        "CUDA_VISIBLE_DEVICES": "6",
+        "FLWR_LOGLEVEL": "DEBUG",
+        "NO_PROXY": "127.0.0.1,localhost",
+        "no_proxy": "127.0.0.1,localhost",
+        "GRPC_ENABLE_HTTP_PROXY": "0",
+        "GRPC_MAX_SEND_MESSAGE_LENGTH": "2147483647",
+        "GRPC_MAX_RECEIVE_MESSAGE_LENGTH": "2147483647"
+      }
+    },
+    {
+      "name": "FL Server (Instruct)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "/data/pc/ZOPretrain/federated/server_flower.py",
+      "cwd": "/data/pc/ZOPretrain",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "subProcess": true,
+      "args": [
+        "--address", "0.0.0.0:8258",
+        "--rounds", "6",
+        "--min_fit_clients", "2",
+        "--min_available_clients", "2",
+        "--fraction_fit", "1.0",
+        "--fraction_evaluate", "0.0",
+        "--device", "cuda",
+        "--instruct_enable",
+        "--instruct_candidate_pool", "64",
+        "--instruct_topk", "4",
+        "--instruct_dir_count", "2",
+        "--instruct_eval_steps", "1",
+        "--server_zo_epsilon", "1e-4",
+        "--server_zo_lr", "1e-6",
+        "--server_zo_optimizer", "adam",
+        "--server_zo_betas", "0.9", "0.999",
+        "--server_zo_eps", "1e-8",
+        "--server_zo_weight_decay", "0.0"
+      ],
+      "env": {
+        "PYTHONPATH": "/data/pc/ZOPretrain",
+        "CUDA_VISIBLE_DEVICES": "6",
+        "FLWR_LOGLEVEL": "DEBUG",
+        "NO_PROXY": "127.0.0.1,localhost",
+        "no_proxy": "127.0.0.1,localhost",
+        "GRPC_ENABLE_HTTP_PROXY": "0",
+        "GRPC_MAX_SEND_MESSAGE_LENGTH": "2147483647",
+        "GRPC_MAX_RECEIVE_MESSAGE_LENGTH": "2147483647"
+      }
+    },
+    {
+      "name": "FL Client Strong (Instruct)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "/data/pc/ZOPretrain/federated/client_flower.py",
+      "cwd": "/data/pc/ZOPretrain",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "subProcess": true,
+      "preLaunchTask": "wait-for-flower-8258",
+      "args": [
+        "--server", "127.0.0.1:8258",
+        "--client_id", "0",
+        "--num_clients", "2",
+        "--mode", "ZO",
+        "--scope", "reduced",
+        "--client_zo_q", "1",
+        "--lr", "1e-6",
+        "--local_epochs", "1",
+        "--local_steps", "1",
+        "--batch_size", "2",
+        "--block_size", "64",
+        "--cache_dir", "cache",
+        "--sample_count", "16",
+        "--device", "cuda",
+        "--log_interval", "50",
+        "--role", "strong"
+      ],
+      "env": {
+        "PYTHONPATH": "/data/pc/ZOPretrain",
+        "CUDA_VISIBLE_DEVICES": "6",
+        "FLWR_LOGLEVEL": "DEBUG",
+        "NO_PROXY": "127.0.0.1,localhost",
+        "no_proxy": "127.0.0.1,localhost",
+        "GRPC_ENABLE_HTTP_PROXY": "0",
+        "GRPC_MAX_SEND_MESSAGE_LENGTH": "2147483647",
+        "GRPC_MAX_RECEIVE_MESSAGE_LENGTH": "2147483647"
+      }
+    },
+    {
+      "name": "FL Client Weak (Instruct)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "/data/pc/ZOPretrain/federated/client_flower.py",
+      "cwd": "/data/pc/ZOPretrain",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "justMyCode": true,
+      "subProcess": true,
+      "preLaunchTask": "wait-for-flower-8258",
+      "args": [
+        "--server", "127.0.0.1:8258",
+        "--client_id", "1",
+        "--num_clients", "2",
+        "--mode", "ZO",
+        "--scope", "reduced",
+        "--client_zo_q", "1",
+        "--lr", "1e-6",
+        "--local_epochs", "1",
+        "--local_steps", "1",
+        "--batch_size", "2",
+        "--block_size", "64",
+        "--cache_dir", "cache",
+        "--sample_count", "16",
+        "--device", "cuda",
+        "--log_interval", "50",
+        "--role", "weak"
+      ],
+      "env": {
+        "PYTHONPATH": "/data/pc/ZOPretrain",
+        "CUDA_VISIBLE_DEVICES": "6",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
@@ -79,6 +195,7 @@
         "GRPC_MAX_RECEIVE_MESSAGE_LENGTH": "2147483647"
       }
     }
+
   ],
   "compounds": [
     {
@@ -86,6 +203,15 @@
       "configurations": [
         "FL Server (ZO server-side, no init broadcast)",
         "FL Client 0 (ZO only)"
+      ],
+      "stopAll": true
+    },
+    {
+      "name": "Instruct: Server + Strong + Weak",
+      "configurations": [
+        "FL Server (Instruct)",
+        "FL Client Strong (Instruct)",
+        "FL Client Weak (Instruct)"
       ],
       "stopAll": true
     }

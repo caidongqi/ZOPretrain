@@ -1,419 +1,525 @@
 #!/bin/bash
 
-# Federated Learning (Flower) Parallel Sweep Script
-# 参考 parallel_sweep.sh 的结构，针对 federated/server_flower.py 与 federated/client_flower.py
+set -euo pipefail
 
-set -e
+WORKSPACE="/data/pc/ZOPretrain"
+cd "$WORKSPACE"
 
-# 颜色
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-NC='\033[0m'
+PYTHON_BIN=${PYTHON_BIN:-python}
 
-# 默认参数（可通过命令行覆盖）
-MODES=("ZO" "FO")                   # 训练类型
-SCOPES=("full")                     # 训练范围：full 或 reduced
-BATCH_SIZES=(2)                      # 本地 batch_size
-QUERY_BUDGETS=(1 8)                  # ZO 的 q（FO 忽略）
-LEARNING_RATES=(1e-6)                # 学习率
-OPTIMIZERS=("adam" "muon" "sgd")     # 优化器；其中 sgd 仅用于 ZO 且未启用 --zo-use-optimizer 时
-LOCAL_EPOCHS=5                       # 客户端本地 epoch 数
-LOCAL_STEPS=                         # 客户端本地步数上限（留空表示不限制）
-SAMPLE_COUNT=20000                   # 每客户端样本量（用于构造缓存数据）
-BLOCK_SIZE=128                       # token block size
-ZO_USE_OPTIMIZER=                    # 若为 "true"，则 ZO 使用优化器更新；否则用手动 SGD
-WEIGHT_DECAY=0.0
-EPS=1e-8
-BETAS="0.9,0.999"
-MUON_CAUTIOUS=                       # 传入 --muon_cautious 开关
-MUON_ORTHO_INIT=                     # 传入 --muon_orthogonal_init 开关
-MUON_HIDDEN_SIZE=768
-
-# 联邦相关
-ROUNDS=3                             # Server 轮数
-NUM_CLIENTS=1                   # 客户端数量
-MIN_FIT_CLIENTS=1
-MIN_AVAILABLE_CLIENTS=1
-FRACTION_FIT=1.0
-FRACTION_EVAL=0.0
-
-# 并行与设备
-MAX_PARALLEL_JOBS=8                  # 并行实验数
-GPU_IDS="4,5"                        # 用于分配给客户端的 GPU 列表
-DEVICE="cuda"                        # client device: auto|cpu|cuda
-
-# 端口分配
-SERVER_BASE_PORT=8190                # 每个实验 +exp_id 偏移，避免并发冲突
-SERVER_HOST="127.0.0.1"             # Server 绑定主机
-
-# 其他
+OPTIMIZERS=("sgd" "adam" "muon")
+ROUNDS=10000
+LR="1e-6"
+BATCH_SIZE=2
+SCOPE="full"
+SERVER_HOST="127.0.0.1"
+BASE_PORT=8300
+SERVER_DEVICE="auto"
+CLIENT_DEVICE="auto"
+CLIENT_Q=1
+SAMPLE_COUNT=2048
+BLOCK_SIZE=128
+DIR_COUNT=1
+EVAL_STEPS=1
+INSTRUCT_CANDIDATE_POOL=64
 LOG_INTERVAL=10
-RESULTS_DIR="results"
-JOB_LOG_DIR="fl_job_logs_$(date +%Y%m%d_%H%M%S)"
-mkdir -p "$RESULTS_DIR" "$JOB_LOG_DIR"
+WAIT_SERVER_START=5
+RESULT_ROOT="${WORKSPACE}/federated/parallel_runs"
+CLIENT_GPU_LIST=(2 3 5)
 
 print_help() {
-    echo "Usage: $0 [OPTIONS]"
-    echo "Options:"
-    echo "  --parallel N                 最大并行实验数 (默认: $MAX_PARALLEL_JOBS)"
-    echo "  --gpus '0,1,2'              指定客户端可用 GPU 列表 (默认: $GPU_IDS)"
-    echo "  --modes 'ZO,FO'              模式列表 (默认: ${MODES[*]})"
-    echo "  --scopes 'full,reduced'      训练范围列表 (默认: ${SCOPES[*]})"
-    echo "  --batch-sizes '2,4'          本地 batch_size 列表 (默认: ${BATCH_SIZES[*]})"
-    echo "  --query-budgets '1,8'        ZO 的 q 列表 (默认: ${QUERY_BUDGETS[*]})"
-    echo "  --learning-rates '1e-6,3e-6' 学习率列表 (默认: ${LEARNING_RATES[*]})"
-    echo "  --optimizers 'adam,muon,sgd' 优化器列表 (默认: ${OPTIMIZERS[*]})；sgd 仅用于 ZO 且不传 --zo-use-optimizer"
-    echo "  --local-epochs N             本地 epochs (默认: $LOCAL_EPOCHS)"
-    echo "  --local-steps N              本地步数上限，留空不限制 (默认: unset)"
-    echo "  --sample-count N             每客户端样本量 (默认: $SAMPLE_COUNT)"
-    echo "  --block-size N               block size (默认: $BLOCK_SIZE)"
-    echo "  --zo-use-optimizer           ZO 使用优化器更新（默认: 关闭）"
-    echo "  --weight-decay F             weight decay (默认: $WEIGHT_DECAY)"
-    echo "  --eps F                      eps (默认: $EPS)"
-    echo "  --betas '0.9,0.999'          betas (默认: $BETAS)"
-    echo "  --muon-cautious              Muon Cautious 模式"
-    echo "  --muon-ortho-init            Muon 正交初始化"
-    echo "  --muon-hidden-size N         Muon 隐藏维度 (默认: $MUON_HIDDEN_SIZE)"
-    echo "  --rounds N                   Server 轮数 (默认: $ROUNDS)"
-    echo "  --num-clients N              客户端数量 (默认: $NUM_CLIENTS)"
-    echo "  --min-fit-clients N          最小 fit 客户端 (默认: $MIN_FIT_CLIENTS)"
-    echo "  --min-available-clients N    最小可用客户端 (默认: $MIN_AVAILABLE_CLIENTS)"
-    echo "  --fraction-fit F             参与比例 (默认: $FRACTION_FIT)"
-    echo "  --fraction-eval F            评估比例 (默认: $FRACTION_EVAL)"
-    echo "  --device auto|cpu|cuda       客户端设备 (默认: $DEVICE)"
-    echo "  --server-base-port N         Server 基础端口 (默认: $SERVER_BASE_PORT)"
-    echo "  --server-host HOST           Server 主机 (默认: $SERVER_HOST)"
-    echo "  --log-interval N             客户端日志间隔 (默认: $LOG_INTERVAL)"
-    echo "  -h, --help                   显示帮助"
+  cat <<'EOF'
+Usage: federated_parallel_sweep.sh [options]
+
+Options:
+  --rounds N            Number of federated rounds per experiment (default: 4)
+  --optimizers LIST     Comma separated optimizers (default: sgd,adam,muon)
+  --lr VALUE            Server-side learning rate (default: 1e-6)
+  --batch-size N        Client batch size (default: 2)
+  --base-port PORT      Starting TCP port for Flower server (default: 8300)
+  --host HOST           Host/IP for Flower server binding (default: 127.0.0.1)
+  --server-device DEV   Device flag for server process (default: auto)
+  --client-device DEV   Default device flag for client processes (default: auto)
+  --client-gpus LIST    Comma separated GPU ids (or cpu) assigned round-robin
+  --sample-count N      Cached sample count per client (default: 2048)
+  --block-size N        Token block size (default: 128)
+  --scope VALUE         Trainable scope passed to clients (default: full)
+  --dir-count N         Direction count for server-side ZO (default: 1)
+  --eval-steps N        Batches per evaluation round (default: 1)
+  --candidate-pool N    Instruct BP candidate pool size (default: 64)
+  --log-interval N      Client CSV logging interval (default: 10)
+  --help                Show this message and exit
+
+Environment overrides:
+  PYTHON_BIN            Python executable to invoke (default: python)
+EOF
 }
 
-# 解析命令行
 while [[ $# -gt 0 ]]; do
-    case $1 in
-        --parallel)
-            MAX_PARALLEL_JOBS="$2"; shift 2;;
-        --gpus)
-            GPU_IDS="$2"; shift 2;;
-        --modes)
-            IFS=',' read -ra MODES <<< "$2"; shift 2;;
-        --scopes)
-            IFS=',' read -ra SCOPES <<< "$2"; shift 2;;
-        --batch-sizes)
-            IFS=',' read -ra BATCH_SIZES <<< "$2"; shift 2;;
-        --query-budgets)
-            IFS=',' read -ra QUERY_BUDGETS <<< "$2"; shift 2;;
-        --learning-rates)
-            IFS=',' read -ra LEARNING_RATES <<< "$2"; shift 2;;
+  case "$1" in
+    --rounds)
+      ROUNDS="$2"
+      shift 2
+      ;;
         --optimizers)
-            IFS=',' read -ra OPTIMIZERS <<< "$2"; shift 2;;
-        --local-epochs)
-            LOCAL_EPOCHS="$2"; shift 2;;
-        --local-steps)
-            LOCAL_STEPS="$2"; shift 2;;
+      IFS=',' read -r -a OPTIMIZERS <<< "$2"
+      shift 2
+      ;;
+    --lr)
+      LR="$2"
+      shift 2
+      ;;
+    --batch-size)
+      BATCH_SIZE="$2"
+      shift 2
+      ;;
+    --base-port)
+      BASE_PORT="$2"
+      shift 2
+      ;;
+    --host)
+      SERVER_HOST="$2"
+      shift 2
+      ;;
+    --server-device)
+      SERVER_DEVICE="$2"
+      shift 2
+      ;;
+    --client-device)
+      CLIENT_DEVICE="$2"
+      shift 2
+      ;;
+    --client-gpus)
+      IFS=',' read -r -a CLIENT_GPU_LIST <<< "$2"
+      shift 2
+      ;;
         --sample-count)
-            SAMPLE_COUNT="$2"; shift 2;;
+      SAMPLE_COUNT="$2"
+      shift 2
+      ;;
         --block-size)
-            BLOCK_SIZE="$2"; shift 2;;
-        --zo-use-optimizer)
-            ZO_USE_OPTIMIZER="true"; shift 1;;
-        --weight-decay)
-            WEIGHT_DECAY="$2"; shift 2;;
-        --eps)
-            EPS="$2"; shift 2;;
-        --betas)
-            BETAS="$2"; shift 2;;
-        --muon-cautious)
-            MUON_CAUTIOUS="true"; shift 1;;
-        --muon-ortho-init)
-            MUON_ORTHO_INIT="true"; shift 1;;
-        --muon-hidden-size)
-            MUON_HIDDEN_SIZE="$2"; shift 2;;
-        --rounds)
-            ROUNDS="$2"; shift 2;;
-        --num-clients)
-            NUM_CLIENTS="$2"; shift 2;;
-        --min-fit-clients)
-            MIN_FIT_CLIENTS="$2"; shift 2;;
-        --min-available-clients)
-            MIN_AVAILABLE_CLIENTS="$2"; shift 2;;
-        --fraction-fit)
-            FRACTION_FIT="$2"; shift 2;;
-        --fraction-eval)
-            FRACTION_EVAL="$2"; shift 2;;
-        --device)
-            DEVICE="$2"; shift 2;;
-        --server-base-port)
-            SERVER_BASE_PORT="$2"; shift 2;;
-        --server-host)
-            SERVER_HOST="$2"; shift 2;;
+      BLOCK_SIZE="$2"
+      shift 2
+      ;;
+    --scope)
+      SCOPE="$2"
+      shift 2
+      ;;
+    --dir-count)
+      DIR_COUNT="$2"
+      shift 2
+      ;;
+    --eval-steps)
+      EVAL_STEPS="$2"
+      shift 2
+      ;;
+    --candidate-pool)
+      INSTRUCT_CANDIDATE_POOL="$2"
+      shift 2
+      ;;
         --log-interval)
-            LOG_INTERVAL="$2"; shift 2;;
-        -h|--help)
-            print_help; exit 0;;
-        *)
-            echo "Unknown option: $1"; print_help; exit 1;;
+      LOG_INTERVAL="$2"
+      shift 2
+      ;;
+    --help|-h)
+      print_help
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      print_help
+      exit 1
+      ;;
     esac
 done
 
-# 将 GPU 列表解析成数组
-if [[ "$GPU_IDS" == *","* ]]; then
-    IFS=',' read -ra GPU_ARRAY <<< "$GPU_IDS"
-else
-    IFS=' ' read -ra GPU_ARRAY <<< "$GPU_IDS"
-fi
-GPU_COUNT=${#GPU_ARRAY[@]}
-if [ $GPU_COUNT -eq 0 ]; then
-    echo -e "${YELLOW}⚠️ 未提供 GPU，将在 CPU 上运行客户端${NC}"
-    GPU_ARRAY=("cpu")
-    GPU_COUNT=1
-fi
+INSTRUCT_TOPK=$DIR_COUNT
+mkdir -p "$RESULT_ROOT"
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RUN_DIR="${RESULT_ROOT}/${TIMESTAMP}"
+mkdir -p "$RUN_DIR"
+SUMMARY_FILE="${RUN_DIR}/loss_summary.csv"
+echo "mode,optimizer,round,loss" > "$SUMMARY_FILE"
 
-echo -e "${BLUE}🚀 Starting Federated Parallel Sweep${NC}"
-echo "GPUs: ${GPU_ARRAY[*]}"
-echo "Max parallel jobs: $MAX_PARALLEL_JOBS"
-echo "Rounds: $ROUNDS, Num clients: $NUM_CLIENTS"
-echo "Results dir: $RESULTS_DIR, Job logs: $JOB_LOG_DIR"
+{
+  echo "workspace=${WORKSPACE}"
+  echo "timestamp=${TIMESTAMP}"
+  echo "rounds=${ROUNDS}"
+  echo "learning_rate=${LR}"
+  echo "batch_size=${BATCH_SIZE}"
+  echo "scope=${SCOPE}"
+  echo "dir_count=${DIR_COUNT}"
+  echo "eval_steps=${EVAL_STEPS}"
+  echo "optimizers=$(IFS=,; echo "${OPTIMIZERS[*]}")"
+  echo "server_device=${SERVER_DEVICE}"
+  echo "client_device=${CLIENT_DEVICE}"
+  echo "client_gpus=$(IFS=,; echo "${CLIENT_GPU_LIST[*]}")"
+  echo "sample_count=${SAMPLE_COUNT}"
+  echo "block_size=${BLOCK_SIZE}"
+  echo "candidate_pool=${INSTRUCT_CANDIDATE_POOL}"
+  echo "log_interval=${LOG_INTERVAL}"
+} > "${RUN_DIR}/run_configuration.txt"
 
-# 生成实验组合
-generate_experiments() {
-    local experiments=()
-    local exp_id=0
+run_experiment() {
+  local mode="$1"
+  local optimizer="$2"
+  local port="$3"
+  local index="$4"
+  local total="$5"
+  local gpu_list_str="$6"
+  local address="${SERVER_HOST}:${port}"
+  local exp_dir="${RUN_DIR}/${mode}_${optimizer}"
+  mkdir -p "$exp_dir"
 
-    for mode in "${MODES[@]}"; do
-        for scope in "${SCOPES[@]}"; do
-            for bs in "${BATCH_SIZES[@]}"; do
-                if [ "$mode" = "ZO" ]; then
-                    for q in "${QUERY_BUDGETS[@]}"; do
-                        for lr in "${LEARNING_RATES[@]}"; do
-                            for opt in "${OPTIMIZERS[@]}"; do
-                                experiments+=("$exp_id:$mode:$scope:$bs:$q:$lr:$opt")
-                                exp_id=$((exp_id + 1))
-                            done
-                        done
-                    done
-                else
-                    # FO：跳过不受支持的 sgd
-                    for lr in "${LEARNING_RATES[@]}"; do
-                        for opt in "${OPTIMIZERS[@]}"; do
-                            if [ "$opt" = "sgd" ]; then
-                                continue
-                            fi
-                            experiments+=("$exp_id:$mode:$scope:$bs:N/A:$lr:$opt")
-                            exp_id=$((exp_id + 1))
-                        done
-                    done
-                fi
-            done
-        done
-    done
+  local -a assigned_gpus=()
+  if [ -n "$gpu_list_str" ]; then
+    IFS=',' read -r -a assigned_gpus <<< "$gpu_list_str"
+  fi
 
-    printf '%s\n' "${experiments[@]}"
-}
+  local -a server_cmd=(
+    "$PYTHON_BIN" "federated/server_flower.py"
+    --address "$address"
+    --rounds "$ROUNDS"
+    --fraction_fit 1.0
+    --fraction_evaluate 1.0
+    --device "$SERVER_DEVICE"
+    --server_zo_muon_hidden_size 768
+  )
 
-# 运行单个联邦实验：启动 server，再启动 N 个 client
-run_single_fl_experiment() {
-    local exp_config="$1"
-    local log_prefix="$2"    # 用于 server 与 client 的日志文件前缀
+  if [ "$mode" = "instruct" ]; then
+    server_cmd+=(
+      --min_fit_clients 2
+      --min_available_clients 2
+      --instruct_enable
+      --instruct_candidate_pool "$INSTRUCT_CANDIDATE_POOL"
+      --instruct_topk "$INSTRUCT_TOPK"
+      --instruct_dir_count "$DIR_COUNT"
+      --instruct_eval_steps "$EVAL_STEPS"
+      --server_zo_lr "$LR"
+      --server_zo_optimizer "$optimizer"
+      --server_zo_dir_count "$DIR_COUNT"
+      --server_zo_epsilon 1e-4
+      --server_zo_betas 0.9 0.999
+      --server_zo_eps 1e-8
+      --server_zo_weight_decay 0.0
+    )
+  else
+    server_cmd+=(
+      --min_fit_clients 1
+      --min_available_clients 1
+      --server_zo_enable
+      --server_zo_dir_count "$DIR_COUNT"
+      --server_zo_lr "$LR"
+      --server_zo_optimizer "$optimizer"
+      --server_zo_epsilon 1e-4
+      --server_zo_betas 0.9 0.999
+      --server_zo_eps 1e-8
+      --server_zo_weight_decay 0.0
+    )
+  fi
 
-    IFS=':' read -r exp_id mode scope bs q lr opt <<< "$exp_config"
+  local server_log="${exp_dir}/server.log"
+  printf "\n=== [%d/%d] Running %s mode with %s optimizer on %s ===\n" "$index" "$total" "$mode" "$optimizer" "$address"
+  printf "%s\n" "$(printf '%q ' "${server_cmd[@]}")" > "${exp_dir}/server_cmd.txt"
 
-    local port=$((SERVER_BASE_PORT + exp_id))
-    local address="${SERVER_HOST}:${port}"
-    local exp_name="FL_${mode}_${opt}_${scope}_n${NUM_CLIENTS}_q${q}_lr${lr}_e${LOCAL_EPOCHS}_bs${bs}"
-    local server_log="${JOB_LOG_DIR}/${log_prefix}_${exp_name}_server.log"
-
-    # 是否对当前实验启用 ZO 优化器：
-    # 1) 全局显式指定 --zo-use-optimizer；或 2) ZO + muon 时自动启用
-    local use_zo_optimizer=""
-    if [ -n "$ZO_USE_OPTIMIZER" ]; then
-        use_zo_optimizer="true"
-    elif [ "$mode" = "ZO" ] && [ "$opt" = "muon" ]; then
-        use_zo_optimizer="true"
-    fi
-
-    # 组合有效性检查：ZO + 启用优化器时不能选择 sgd
-    if [ "$mode" = "ZO" ] && [ -n "$use_zo_optimizer" ] && [ "$opt" = "sgd" ]; then
-        echo -e "${YELLOW}⏭️  Skip invalid combo: ZO with --zo-use-optimizer does not support 'sgd' optimizer${NC}" | tee -a "$server_log"
-        return 0
-    fi
-    # FO 不支持 sgd（已在生成阶段过滤；此处再次保护）
-    if [ "$mode" = "FO" ] && [ "$opt" = "sgd" ]; then
-        echo -e "${YELLOW}⏭️  Skip invalid combo: FO does not support 'sgd' optimizer${NC}" | tee -a "$server_log"
-        return 0
-    fi
-
-    echo -e "${YELLOW}📡 Launching server: $address for $exp_name${NC}" | tee -a "$server_log"
-
-    # 启动 Server（后台）
-    # 根据模式决定是否启用服务端 ZO 更新
-    local server_cmd="python federated/server_flower.py --address $address --rounds $ROUNDS --min_fit_clients $MIN_FIT_CLIENTS --min_available_clients $MIN_AVAILABLE_CLIENTS --fraction_fit $FRACTION_FIT --fraction_evaluate $FRACTION_EVAL"
-    if [ "$mode" = "ZO" ]; then
-        server_cmd="$server_cmd --zo_server_side --zo_dir_count ${q#N/A} --zo_epsilon 1e-4 --zo_server_lr $lr"
-    fi
-    eval $server_cmd >> "$server_log" 2>&1 &
+  "${server_cmd[@]}" > "$server_log" 2>&1 &
     local server_pid=$!
 
-    # 给 server 一点时间启动监听
-    sleep 2
+  sleep "$WAIT_SERVER_START"
 
-    # 启动 Clients（后台）
+  local client_total=1
+  local roles=("weak")
+  if [ "$mode" = "instruct" ]; then
+    client_total=2
+    roles=("strong" "weak")
+  fi
+
+  if [ "$client_total" -gt 0 ] && [ ${#assigned_gpus[@]} -lt "$client_total" ]; then
+    echo "Error: not enough GPU assignments for ${mode}/${optimizer} (needed ${client_total}, got ${#assigned_gpus[@]})."
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    return 1
+  fi
+
     local client_pids=()
-    local gpu_index=0
-    for ((cid=0; cid<NUM_CLIENTS; cid++)); do
-        local client_log="${JOB_LOG_DIR}/${log_prefix}_${exp_name}_client${cid}.log"
-        local gpu_id="${GPU_ARRAY[$gpu_index]}"
-        gpu_index=$(((gpu_index + 1) % GPU_COUNT))
+  local client_index=0
 
-        echo -e "${PURPLE}👤 Starting client ${cid} on GPU ${gpu_id}${NC}" | tee -a "$client_log"
+  for role in "${roles[@]}"; do
+    local cid=$client_index
+    local client_log="${exp_dir}/client_${cid}_${role}.log"
+    local csv_path="${exp_dir}/client_${cid}_${role}.csv"
+    local -a client_cmd=(
+      "$PYTHON_BIN" "federated/client_flower.py"
+      --server "$address"
+      --client_id "$cid"
+      --num_clients "$client_total"
+      --mode "ZO"
+      --scope "$SCOPE"
+      --client_zo_q "$CLIENT_Q"
+      --lr "$LR"
+      --local_epochs 1
+      --batch_size "$BATCH_SIZE"
+      --block_size "$BLOCK_SIZE"
+      --cache_dir "${WORKSPACE}/cache"
+      --sample_count "$SAMPLE_COUNT"
+      --log_interval "$LOG_INTERVAL"
+      --csv_file "$csv_path"
+      --role "$role"
+    )
 
-        # 构建 client 命令
-        local cmd="python federated/client_flower.py"
-        cmd="$cmd --server $address"
-        cmd="$cmd --client_id $cid"
-        cmd="$cmd --num_clients $NUM_CLIENTS"
-        cmd="$cmd --mode $mode"
-        cmd="$cmd --scope $scope"
-        if [ "$mode" = "ZO" ] && [ "$q" != "N/A" ]; then
-            cmd="$cmd --q $q"
-        fi
-        cmd="$cmd --lr $lr"
-        cmd="$cmd --local_epochs $LOCAL_EPOCHS"
-        if [ -n "$LOCAL_STEPS" ]; then
-            cmd="$cmd --local_steps $LOCAL_STEPS"
-        fi
-        cmd="$cmd --batch_size $bs"
-        cmd="$cmd --block_size $BLOCK_SIZE"
-        cmd="$cmd --cache_dir cache"
-        cmd="$cmd --sample_count $SAMPLE_COUNT"
-        # 仅在需要时传递 --optimizer：
-        # - FO：必须传（adam/muon）
-        # - ZO：当启用优化器路径时（全局或自动启用）且 opt 为 adam/muon 时传；
-        #       若 opt 为 sgd 且未启用优化器，则不传此参数，客户端将走手动 SGD 路径
-        if [ "$mode" = "FO" ]; then
-            cmd="$cmd --optimizer $opt"
-        else
-            if [ -n "$use_zo_optimizer" ] && [ "$opt" != "sgd" ]; then
-                cmd="$cmd --optimizer $opt"
-            fi
-        fi
-        cmd="$cmd --weight_decay $WEIGHT_DECAY"
-        cmd="$cmd --eps $EPS"
-        # 处理 betas
-        IFS=',' read -ra BETA_ARR <<< "$BETAS"
-        if [ ${#BETA_ARR[@]} -eq 2 ]; then
-            cmd="$cmd --betas ${BETA_ARR[0]} ${BETA_ARR[1]}"
-        fi
-        if [ -n "$MUON_CAUTIOUS" ]; then
-            cmd="$cmd --muon_cautious"
-        fi
-        if [ -n "$MUON_ORTHO_INIT" ]; then
-            cmd="$cmd --muon_orthogonal_init"
-        fi
-        cmd="$cmd --muon_hidden_size $MUON_HIDDEN_SIZE"
-        if [ -n "$use_zo_optimizer" ]; then
-            cmd="$cmd --zo_use_optimizer"
-        fi
-        cmd="$cmd --device $DEVICE"
-        if [ "$DEVICE" = "cuda" ]; then
-            cmd="$cmd --gpu $gpu_id"
-        fi
-        cmd="$cmd --log_interval $LOG_INTERVAL"
+    local device_arg="$CLIENT_DEVICE"
+    local -a device_flags=()
 
-        if [ -z "$ZO_USE_OPTIMIZER" ] && [ -n "$use_zo_optimizer" ]; then
-            echo "[auto] Enabled --zo_use_optimizer for ZO + muon" >> "$client_log"
-        fi
-        echo "Command: $cmd" >> "$client_log"
-        eval $cmd >> "$client_log" 2>&1 &
-        client_pids+=("$!")
-    done
-
-    # 等待所有客户端完成
-    local exit_code=0
-    for pid in "${client_pids[@]}"; do
-        if ! wait $pid; then
-            exit_code=1
-        fi
-    done
-
-    # 等待 server（其会在 rounds 结束后退出）
-    if ! wait $server_pid; then
-        exit_code=1
+    local gpu_id=""
+    if [ ${#assigned_gpus[@]} -gt "$client_index" ]; then
+      gpu_id="${assigned_gpus[$client_index]}"
     fi
 
-    if [ $exit_code -eq 0 ]; then
-        echo -e "${GREEN}✅ Experiment $exp_name completed successfully${NC}"
-        return 0
-    else
-        echo -e "${RED}❌ Experiment $exp_name failed${NC}"
+    if [ -n "$gpu_id" ]; then
+      if [ "$gpu_id" = "cpu" ]; then
+        device_arg="cpu"
+      else
+        device_arg="cuda"
+        device_flags+=(--gpu "$gpu_id")
+      fi
+    fi
+
+    client_cmd+=(--device "$device_arg")
+    if [ ${#device_flags[@]} -gt 0 ]; then
+      client_cmd+=("${device_flags[@]}")
+    fi
+
+    printf "%s\n" "$(printf '%q ' "${client_cmd[@]}")" > "${exp_dir}/client_${cid}_${role}_cmd.txt"
+
+    "${client_cmd[@]}" > "$client_log" 2>&1 &
+        client_pids+=("$!")
+    client_index=$((client_index + 1))
+    done
+
+  local client_status=0
+    for pid in "${client_pids[@]}"; do
+    if ! wait "$pid"; then
+      client_status=1
+        fi
+    done
+
+  if [ $client_status -ne 0 ]; then
+    echo "Client failure detected; terminating server."
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    return 1
+  fi
+
+  if ! wait "$server_pid"; then
+    echo "Server process exited with failure."
         return 1
     fi
+
+  local loss_csv="${exp_dir}/round_losses.csv"
+  local parse_output
+  parse_output=$(
+    "$PYTHON_BIN" - "$server_log" "$ROUNDS" "$loss_csv" "$mode" "$optimizer" \
+      2> "${exp_dir}/loss_parse.stderr" <<'PY'
+import sys, re, json, pathlib
+
+log_path, rounds, csv_path, mode, opt = sys.argv[1:6]
+rounds = int(rounds)
+pattern = re.compile(r"loss\s*(?:=|:)\s*([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)")
+losses = []
+with open(log_path, "r", encoding="utf-8", errors="ignore") as fh:
+    for line in fh:
+        if "evaluate" not in line.lower():
+            continue
+        match = pattern.search(line)
+        if match:
+            try:
+                losses.append(float(match.group(1)))
+            except ValueError:
+                continue
+if rounds > 0 and len(losses) > rounds:
+    losses = losses[:rounds]
+pathlib.Path(csv_path).parent.mkdir(parents=True, exist_ok=True)
+with open(csv_path, "w", encoding="utf-8") as fh:
+    fh.write("round,loss\n")
+    for idx, value in enumerate(losses, start=1):
+        fh.write(f"{idx},{value}\n")
+with open(csv_path.replace(".csv", ".json"), "w", encoding="utf-8") as fh:
+    json.dump({"mode": mode, "optimizer": opt, "losses": losses}, fh, indent=2)
+print(len(losses))
+PY
+  )
+
+  local parse_count
+  parse_count=$(echo "$parse_output" | tr -d '[:space:]')
+  if [[ ! "$parse_count" =~ ^[0-9]+$ ]]; then
+    echo "Warning: unable to interpret evaluation loss count for ${mode}/${optimizer} (raw: ${parse_output})."
+    parse_count=0
+  fi
+
+  if [ "$parse_count" -eq 0 ]; then
+    echo "Warning: no evaluation losses were captured in server log for ${mode}/${optimizer}."
+  elif [ "$parse_count" -ne "$ROUNDS" ]; then
+    echo "Notice: parsed ${parse_count} evaluation losses (requested rounds: ${ROUNDS})."
+  fi
+
+  cat > "${exp_dir}/config.json" <<EOF
+{
+  "mode": "${mode}",
+  "optimizer": "${optimizer}",
+  "address": "${address}",
+  "rounds": ${ROUNDS},
+  "learning_rate": "${LR}",
+  "batch_size": ${BATCH_SIZE},
+  "scope": "${SCOPE}",
+  "dir_count": ${DIR_COUNT},
+  "eval_steps": ${EVAL_STEPS},
+  "sample_count": ${SAMPLE_COUNT},
+  "block_size": ${BLOCK_SIZE},
+  "candidate_pool": ${INSTRUCT_CANDIDATE_POOL}
+}
+EOF
+
+  printf "=== [%d/%d] Finished %s/%s ===\n" "$index" "$total" "$mode" "$optimizer"
 }
 
-# 并行调度多个实验
-run_parallel() {
-    local experiments=( $(generate_experiments) )
-    local total=${#experiments[@]}
-    local completed=0
-    local successful=0
-    local failed=0
+declare -a EXPERIMENTS=()
+declare -a EXPERIMENT_CLIENT_COUNTS=()
+declare -a EXPERIMENT_PORTS=()
 
-    echo -e "${BLUE}📋 Generated $total experiments${NC}"
+for optimizer in "${OPTIMIZERS[@]}"; do
+  local_idx=${#EXPERIMENTS[@]}
+  EXPERIMENTS+=("instruct:${optimizer}")
+  EXPERIMENT_CLIENT_COUNTS+=(2)
+  EXPERIMENT_PORTS+=($((BASE_PORT + local_idx)))
 
-    local running_jobs=()
+  local_idx=${#EXPERIMENTS[@]}
+  EXPERIMENTS+=("server_zo:${optimizer}")
+  EXPERIMENT_CLIENT_COUNTS+=(1)
+  EXPERIMENT_PORTS+=($((BASE_PORT + local_idx)))
+done
 
-    while [ $completed -lt $total ]; do
-        while [ ${#running_jobs[@]} -lt $MAX_PARALLEL_JOBS ] && [ ${#experiments[@]} -gt 0 ]; do
-            local exp="${experiments[0]}"
-            experiments=("${experiments[@]:1}")
+TOTAL_EXPERIMENTS=${#EXPERIMENTS[@]}
+echo "Total experiments: ${TOTAL_EXPERIMENTS}"
 
-            # 启动后台作业
-            run_single_fl_experiment "$exp" "job$(date +%H%M%S)" &
-            local pid=$!
-            running_jobs+=("$pid:$exp")
-            echo -e "${PURPLE}🔄 Started job $pid for exp $exp${NC}"
-        done
+if [ "$TOTAL_EXPERIMENTS" -eq 0 ]; then
+  echo "No experiments scheduled. Exiting."
+  exit 0
+fi
 
-        # 检查完成的任务
-        local new_running=()
-        for item in "${running_jobs[@]}"; do
-            IFS=':' read -r pid exp <<< "$item"
-            if kill -0 $pid 2>/dev/null; then
-                new_running+=("$item")
-            else
-                wait $pid
-                local code=$?
-                completed=$((completed + 1))
-                if [ $code -eq 0 ]; then
-                    successful=$((successful + 1))
-                else
-                    failed=$((failed + 1))
-                fi
-                echo -e "${BLUE}📊 Progress: $completed/$total (Success: $successful, Failed: $failed)${NC}"
-            fi
-        done
-        running_jobs=("${new_running[@]}")
-        sleep 1
+max_clients_per_experiment=0
+for count in "${EXPERIMENT_CLIENT_COUNTS[@]}"; do
+  if [ "$count" -gt "$max_clients_per_experiment" ]; then
+    max_clients_per_experiment="$count"
+  fi
+done
+
+if [ ${#CLIENT_GPU_LIST[@]} -lt "$max_clients_per_experiment" ]; then
+  echo "Error: 每个实验最多需要 ${max_clients_per_experiment} 张卡，但当前 GPU 列表只有 ${#CLIENT_GPU_LIST[@]} 项。请扩充 --client-gpus 或减少实验并行度。"
+  exit 1
+fi
+
+declare -a AVAILABLE_GPUS=("${CLIENT_GPU_LIST[@]}")
+declare -a RUNNING_PIDS=()
+declare -a RUNNING_LABELS=()
+declare -a RUNNING_GPUS=()
+
+failures=0
+next_experiment_idx=0
+
+while [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ] || [ ${#RUNNING_PIDS[@]} -gt 0 ]; do
+  scheduled=false
+
+  while [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ]; do
+    clients_needed=${EXPERIMENT_CLIENT_COUNTS[$next_experiment_idx]}
+    if [ ${#AVAILABLE_GPUS[@]} -lt "$clients_needed" ]; then
+      break
+    fi
+
+    declare -a assigned=()
+    for ((i=0; i<clients_needed; i++)); do
+      assigned+=("${AVAILABLE_GPUS[0]}")
+      if [ ${#AVAILABLE_GPUS[@]} -gt 1 ]; then
+        AVAILABLE_GPUS=("${AVAILABLE_GPUS[@]:1}")
+      else
+        AVAILABLE_GPUS=()
+      fi
     done
 
-    # 等待剩余任务
-    for item in "${running_jobs[@]}"; do
-        IFS=':' read -r pid exp <<< "$item"
-        wait $pid
-        local code=$?
-        completed=$((completed + 1))
-        if [ $code -eq 0 ]; then
-            successful=$((successful + 1))
-        else
-            failed=$((failed + 1))
-        fi
+    label="${EXPERIMENTS[$next_experiment_idx]}"
+    port="${EXPERIMENT_PORTS[$next_experiment_idx]}"
+    index_display=$((next_experiment_idx + 1))
+    gpu_str=$(IFS=','; echo "${assigned[*]}")
+    printf "Assigning GPUs [%s] to %s (port %s)\n" "$gpu_str" "$label" "$port"
+
+    IFS=: read -r mode optimizer <<< "$label"
+    run_experiment "$mode" "$optimizer" "$port" "$index_display" "$TOTAL_EXPERIMENTS" "$gpu_str" &
+    pid=$!
+
+    RUNNING_PIDS+=("$pid")
+    RUNNING_LABELS+=("$label")
+    RUNNING_GPUS+=("$gpu_str")
+
+    next_experiment_idx=$((next_experiment_idx + 1))
+    scheduled=true
+  done
+
+  if [ ${#RUNNING_PIDS[@]} -gt 0 ]; then
+    pid=${RUNNING_PIDS[0]}
+    label=${RUNNING_LABELS[0]}
+    gpu_str=${RUNNING_GPUS[0]}
+
+    if ! wait "$pid"; then
+      echo "Experiment ${label} failed."
+      failures=$((failures + 1))
+    fi
+
+    if [ -n "$gpu_str" ]; then
+      IFS=',' read -r -a released <<< "$gpu_str"
+      AVAILABLE_GPUS+=("${released[@]}")
+    fi
+
+    RUNNING_PIDS=("${RUNNING_PIDS[@]:1}")
+    RUNNING_LABELS=("${RUNNING_LABELS[@]:1}")
+    RUNNING_GPUS=("${RUNNING_GPUS[@]:1}")
+  elif [ "$scheduled" = false ] && [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ]; then
+    echo "Error: 当前可用 GPU 数不足以启动实验 ${EXPERIMENTS[$next_experiment_idx]}（需要 ${EXPERIMENT_CLIENT_COUNTS[$next_experiment_idx]} 张，现余 ${#AVAILABLE_GPUS[@]} 张）。"
+    failures=$((failures + 1))
+    break
+  else
+    break
+  fi
+done
+
+if [ "$failures" -gt 0 ]; then
+  echo "${failures} experiment(s) failed."
+  exit 1
+fi
+
+for idx in "${!EXPERIMENTS[@]}"; do
+  IFS=: read -r mode optimizer <<< "${EXPERIMENTS[$idx]}"
+  loss_csv="${RUN_DIR}/${mode}_${optimizer}/round_losses.csv"
+  if [ -s "$loss_csv" ]; then
+    tail -n +2 "$loss_csv" | while IFS=, read -r round loss; do
+      if [ -n "$round" ] && [ -n "$loss" ]; then
+        echo "${mode},${optimizer},${round},${loss}" >> "$SUMMARY_FILE"
+      fi
     done
+  fi
+done
 
-    echo -e "${GREEN}🎉 All experiments completed! Total: $total, Success: $successful, Failed: $failed${NC}"
-}
+echo
+echo "All experiments finished."
+echo "Summary (mode, optimizer, round, loss):"
+if [ -s "$SUMMARY_FILE" ]; then
+  if command -v column >/dev/null 2>&1; then
+    column -t -s, "$SUMMARY_FILE"
+  else
+    cat "$SUMMARY_FILE"
+  fi
+else
+  echo "No evaluation loss entries were captured. Inspect logs under ${RUN_DIR}."
+fi
 
-run_parallel
-
+echo
+echo "Detailed logs and configs are stored in: ${RUN_DIR}"
 
