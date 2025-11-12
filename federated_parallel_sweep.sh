@@ -7,25 +7,37 @@ cd "$WORKSPACE"
 
 PYTHON_BIN=${PYTHON_BIN:-python}
 
-OPTIMIZERS=("sgd" "adam" "muon")
+OPTIMIZERS=("adam")
 ROUNDS=10000
-LR="1e-6"
+LR="1e-3"
 BATCH_SIZE=2
 SCOPE="full"
 SERVER_HOST="127.0.0.1"
-BASE_PORT=8300
+BASE_PORT=8319
 SERVER_DEVICE="auto"
 CLIENT_DEVICE="auto"
-CLIENT_Q=1
+CLIENT_Q=4
 SAMPLE_COUNT=2048
 BLOCK_SIZE=128
 DIR_COUNT=1
 EVAL_STEPS=1
 INSTRUCT_CANDIDATE_POOL=64
 LOG_INTERVAL=10
+WEAK_COUNT=1
 WAIT_SERVER_START=5
 RESULT_ROOT="${WORKSPACE}/federated/parallel_runs"
-CLIENT_GPU_LIST=(2 3 5)
+CLIENT_GPU_LIST=(0 4 5)
+# Auto GPU scheduling
+AUTO_GPU=1
+MIN_FREE_GB=5
+MIN_FREE_GB_STRONG=12
+GPU_POLL_INTERVAL=2
+GPU_POLL_TIMEOUT=600
+# Modes control: instruct, server_zo (comma-separated)
+MODES="instruct"
+# GPU launch lock and jitter
+GPU_LOCK_GRACE=3
+GPU_START_JITTER=0
 
 print_help() {
   cat <<'EOF'
@@ -48,6 +60,15 @@ Options:
   --eval-steps N        Batches per evaluation round (default: 1)
   --candidate-pool N    Instruct BP candidate pool size (default: 64)
   --log-interval N      Client CSV logging interval (default: 10)
+  --weak-count N        Number of weak clients when mode=instruct (default: 8)
+  --auto-gpu            Enable dynamic GPU scheduling by free memory (default: off)
+  --min-free-gb N       Min free GB required to schedule a client (default: 5)
+  --min-free-gb-strong N Min free GB required for strong client scheduling (default: 12)
+  --gpu-poll-interval S Seconds between GPU free-mem checks (default: 2)
+  --gpu-poll-timeout S  Max seconds to wait for a suitable GPU (default: 600)
+  --modes LIST          Which modes to run: instruct,server_zo (default: both)
+  --gpu-lock-grace S    Seconds to hold per-GPU lock after launch (default: 3)
+  --gpu-start-jitter S  Random jitter [0,S] before/after launch (default: 0)
   --help                Show this message and exit
 
 Environment overrides:
@@ -121,9 +142,45 @@ while [[ $# -gt 0 ]]; do
       LOG_INTERVAL="$2"
       shift 2
       ;;
+    --weak-count)
+      WEAK_COUNT="$2"
+      shift 2
+      ;;
+    --auto-gpu)
+      AUTO_GPU=1
+      shift 1
+      ;;
+    --min-free-gb)
+      MIN_FREE_GB="$2"
+      shift 2
+      ;;
+    --min-free-gb-strong)
+      MIN_FREE_GB_STRONG="$2"
+      shift 2
+      ;;
+    --gpu-poll-interval)
+      GPU_POLL_INTERVAL="$2"
+      shift 2
+      ;;
+    --gpu-poll-timeout)
+      GPU_POLL_TIMEOUT="$2"
+      shift 2
+      ;;
+    --gpu-lock-grace)
+      GPU_LOCK_GRACE="$2"
+      shift 2
+      ;;
+    --gpu-start-jitter)
+      GPU_START_JITTER="$2"
+      shift 2
+      ;;
     --help|-h)
       print_help
       exit 0
+      ;;
+    --modes)
+      MODES="$2"
+      shift 2
       ;;
     *)
       echo "Unknown option: $1" >&2
@@ -158,7 +215,68 @@ echo "mode,optimizer,round,loss" > "$SUMMARY_FILE"
   echo "block_size=${BLOCK_SIZE}"
   echo "candidate_pool=${INSTRUCT_CANDIDATE_POOL}"
   echo "log_interval=${LOG_INTERVAL}"
+  echo "weak_count=${WEAK_COUNT}"
+  echo "auto_gpu=${AUTO_GPU}"
+  echo "min_free_gb=${MIN_FREE_GB}"
+  echo "min_free_gb_strong=${MIN_FREE_GB_STRONG}"
+  echo "gpu_poll_interval=${GPU_POLL_INTERVAL}"
+  echo "gpu_poll_timeout=${GPU_POLL_TIMEOUT}"
+  echo "gpu_lock_grace=${GPU_LOCK_GRACE}"
+  echo "gpu_start_jitter=${GPU_START_JITTER}"
 } > "${RUN_DIR}/run_configuration.txt"
+
+# --------------------------
+# GPU scheduling helpers
+# --------------------------
+get_all_gpu_ids() {
+  if ! command -v nvidia-smi >/dev/null 2>&1; then
+    echo ""
+    return
+  fi
+  nvidia-smi --query-gpu=index --format=csv,noheader,nounits 2>/dev/null | tr '\n' ',' | sed 's/,$//'
+}
+
+get_gpu_free_mb_map() {
+  # Output lines: "id free_mb"
+  if ! command -v nvidia-smi >/dev/null 2>&1; then
+    return
+  fi
+  nvidia-smi --query-gpu=index,memory.free --format=csv,noheader,nounits 2>/dev/null | awk -F',' '{gsub(/ /,"",$0); print $1" "$2}'
+}
+
+pick_gpu_with_free_mb() {
+  local min_free_mb="$1"
+  local allowed_csv="$2" # comma-separated ids, may be empty meaning all
+  local best_id=""
+  local best_free=-1
+  local allowed_pat="^("$(echo "$allowed_csv" | sed 's/,/|/g')")$"
+  while read -r line; do
+    local gid free
+    gid=$(echo "$line" | awk '{print $1}')
+    free=$(echo "$line" | awk '{print $2}')
+    if [ -n "$allowed_csv" ]; then
+      if ! echo "$gid" | grep -Eq "$allowed_pat"; then
+        continue
+      fi
+    fi
+    if [ "$free" -ge "$min_free_mb" ]; then
+      if [ "$free" -gt "$best_free" ]; then
+        best_free="$free"
+        best_id="$gid"
+      fi
+    fi
+  done < <(get_gpu_free_mb_map)
+  echo "$best_id"
+}
+
+get_gpu_free_mb_single() {
+  local gid="$1"
+  if ! command -v nvidia-smi >/dev/null 2>&1; then
+    echo 0
+    return
+  fi
+  nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits -i "$gid" 2>/dev/null | head -n1 | tr -d '[:space:]'
+}
 
 run_experiment() {
   local mode="$1"
@@ -188,9 +306,10 @@ run_experiment() {
 
   if [ "$mode" = "instruct" ]; then
     server_cmd+=(
-      --min_fit_clients 2
-      --min_available_clients 2
+      --min_fit_clients $((1 + WEAK_COUNT))
+      --min_available_clients $((1 + WEAK_COUNT))
       --instruct_enable
+      --instruct_server_csv "${exp_dir}/server_round_metrics.csv"
       --instruct_candidate_pool "$INSTRUCT_CANDIDATE_POOL"
       --instruct_topk "$INSTRUCT_TOPK"
       --instruct_dir_count "$DIR_COUNT"
@@ -230,15 +349,21 @@ run_experiment() {
   local client_total=1
   local roles=("weak")
   if [ "$mode" = "instruct" ]; then
-    client_total=2
-    roles=("strong" "weak")
+    client_total=$((1 + WEAK_COUNT))
+    roles=("strong")
+    # append WEAK_COUNT times "weak"
+    for ((wi=0; wi<WEAK_COUNT; wi++)); do
+      roles+=("weak")
+    done
   fi
 
-  if [ "$client_total" -gt 0 ] && [ ${#assigned_gpus[@]} -lt "$client_total" ]; then
-    echo "Error: not enough GPU assignments for ${mode}/${optimizer} (needed ${client_total}, got ${#assigned_gpus[@]})."
-    kill "$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
-    return 1
+  if [ "$AUTO_GPU" -eq 0 ]; then
+    if [ "$client_total" -gt 0 ] && [ ${#assigned_gpus[@]} -lt "$client_total" ]; then
+      echo "Error: not enough GPU assignments for ${mode}/${optimizer} (needed ${client_total}, got ${#assigned_gpus[@]})."
+      kill "$server_pid" 2>/dev/null || true
+      wait "$server_pid" 2>/dev/null || true
+      return 1
+    fi
   fi
 
     local client_pids=()
@@ -271,16 +396,80 @@ run_experiment() {
     local -a device_flags=()
 
     local gpu_id=""
-    if [ ${#assigned_gpus[@]} -gt "$client_index" ]; then
-      gpu_id="${assigned_gpus[$client_index]}"
-    fi
-
-    if [ -n "$gpu_id" ]; then
-      if [ "$gpu_id" = "cpu" ]; then
-        device_arg="cpu"
+    if [ "$AUTO_GPU" -eq 1 ]; then
+      # dynamic pick: choose a GPU with at least MIN_FREE_GB free, within CLIENT_GPU_LIST if provided
+      local allowed_csv=""
+      if [ ${#assigned_gpus[@]} -gt 0 ]; then
+        allowed_csv=$(IFS=','; echo "${assigned_gpus[*]}")
       else
-        device_arg="cuda"
-        device_flags+=(--gpu "$gpu_id")
+        # fall back to all GPUs
+        allowed_csv="$(get_all_gpu_ids)"
+      fi
+      # role-specific threshold: strong uses higher bar
+      local min_free_gb_role="$MIN_FREE_GB"
+      if [ "$role" = "strong" ]; then
+        min_free_gb_role="$MIN_FREE_GB_STRONG"
+      fi
+      local min_free_mb=$((min_free_gb_role * 1024))
+      local waited=0
+      local lock_fd=""
+      local lock_path=""
+      while true; do
+        gpu_id="$(pick_gpu_with_free_mb "$min_free_mb" "$allowed_csv")"
+        if [ -n "$gpu_id" ]; then
+          # Acquire per-GPU lock to stagger starts
+          lock_path="/tmp/fed_gpu_${gpu_id}.lock"
+          # shellcheck disable=SC3020
+          exec {lock_fd}> "$lock_path" || true
+          if [ -n "$lock_fd" ]; then
+            if flock -n "$lock_fd"; then
+              # recheck free memory inside lock
+              current_free="$(get_gpu_free_mb_single "$gpu_id")"
+              if [ -z "$current_free" ]; then current_free=0; fi
+              if [ "$current_free" -ge "$min_free_mb" ]; then
+                break
+              else
+                # not enough now; release lock and continue polling
+                flock -u "$lock_fd" || true
+                exec {lock_fd}>&- || true
+                lock_fd=""
+                lock_path=""
+              fi
+            else
+              # lock busy, continue polling
+              exec {lock_fd}>&- || true
+              lock_fd=""
+            fi
+          fi
+        fi
+        if [ "$waited" -ge "$GPU_POLL_TIMEOUT" ]; then
+          echo "Timed out waiting for a GPU with >= ${MIN_FREE_GB}GB free for client ${client_index} (${mode}/${optimizer})."
+          kill "$server_pid" 2>/dev/null || true
+          wait "$server_pid" 2>/dev/null || true
+          return 1
+        fi
+        sleep "$GPU_POLL_INTERVAL"
+        waited=$((waited + GPU_POLL_INTERVAL))
+      done
+      # optional pre-launch jitter to further desynchronize
+      if [ "$GPU_START_JITTER" != "0" ]; then
+        # random in [0, GPU_START_JITTER]
+        jitter=$(awk -v s="$GPU_START_JITTER" 'BEGIN{srand(); printf "%.3f", rand()*s}')
+        sleep "$jitter"
+      fi
+      device_arg="cuda"
+      device_flags+=(--gpu "$gpu_id")
+    else
+      if [ ${#assigned_gpus[@]} -gt "$client_index" ]; then
+        gpu_id="${assigned_gpus[$client_index]}"
+      fi
+      if [ -n "$gpu_id" ]; then
+        if [ "$gpu_id" = "cpu" ]; then
+          device_arg="cpu"
+        else
+          device_arg="cuda"
+          device_flags+=(--gpu "$gpu_id")
+        fi
       fi
     fi
 
@@ -293,6 +482,13 @@ run_experiment() {
 
     "${client_cmd[@]}" > "$client_log" 2>&1 &
         client_pids+=("$!")
+    # hold the lock for a grace period to allow memory allocation to complete
+    if [ "$AUTO_GPU" -eq 1 ] && [ -n "$lock_fd" ]; then
+      sleep "$GPU_LOCK_GRACE"
+      flock -u "$lock_fd" || true
+      exec {lock_fd}>&- || true
+      lock_fd=""
+    fi
     client_index=$((client_index + 1))
     done
 
@@ -386,16 +582,27 @@ declare -a EXPERIMENTS=()
 declare -a EXPERIMENT_CLIENT_COUNTS=()
 declare -a EXPERIMENT_PORTS=()
 
-for optimizer in "${OPTIMIZERS[@]}"; do
-  local_idx=${#EXPERIMENTS[@]}
-  EXPERIMENTS+=("instruct:${optimizer}")
-  EXPERIMENT_CLIENT_COUNTS+=(2)
-  EXPERIMENT_PORTS+=($((BASE_PORT + local_idx)))
+IFS=',' read -r -a MODES_ARR <<< "$MODES"
+want_instruct=0
+want_server_zo=0
+for m in "${MODES_ARR[@]}"; do
+  if [ "$m" = "instruct" ]; then want_instruct=1; fi
+  if [ "$m" = "server_zo" ]; then want_server_zo=1; fi
+done
 
-  local_idx=${#EXPERIMENTS[@]}
-  EXPERIMENTS+=("server_zo:${optimizer}")
-  EXPERIMENT_CLIENT_COUNTS+=(1)
-  EXPERIMENT_PORTS+=($((BASE_PORT + local_idx)))
+for optimizer in "${OPTIMIZERS[@]}"; do
+  if [ "$want_instruct" -eq 1 ]; then
+    local_idx=${#EXPERIMENTS[@]}
+    EXPERIMENTS+=("instruct:${optimizer}")
+    EXPERIMENT_CLIENT_COUNTS+=($((1 + WEAK_COUNT)))
+    EXPERIMENT_PORTS+=($((BASE_PORT + local_idx)))
+  fi
+  if [ "$want_server_zo" -eq 1 ]; then
+    local_idx=${#EXPERIMENTS[@]}
+    EXPERIMENTS+=("server_zo:${optimizer}")
+    EXPERIMENT_CLIENT_COUNTS+=(1)
+    EXPERIMENT_PORTS+=($((BASE_PORT + local_idx)))
+  fi
 done
 
 TOTAL_EXPERIMENTS=${#EXPERIMENTS[@]}
@@ -413,9 +620,11 @@ for count in "${EXPERIMENT_CLIENT_COUNTS[@]}"; do
   fi
 done
 
-if [ ${#CLIENT_GPU_LIST[@]} -lt "$max_clients_per_experiment" ]; then
-  echo "Error: 每个实验最多需要 ${max_clients_per_experiment} 张卡，但当前 GPU 列表只有 ${#CLIENT_GPU_LIST[@]} 项。请扩充 --client-gpus 或减少实验并行度。"
-  exit 1
+if [ "$AUTO_GPU" -eq 0 ]; then
+  if [ ${#CLIENT_GPU_LIST[@]} -lt "$max_clients_per_experiment" ]; then
+    echo "Error: 每个实验最多需要 ${max_clients_per_experiment} 张卡，但当前 GPU 列表只有 ${#CLIENT_GPU_LIST[@]} 项。可启用 --auto-gpu 或扩充 --client-gpus。"
+    exit 1
+  fi
 fi
 
 declare -a AVAILABLE_GPUS=("${CLIENT_GPU_LIST[@]}")
@@ -431,19 +640,29 @@ while [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ] || [ ${#RUNNING_PIDS[@
 
   while [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ]; do
     clients_needed=${EXPERIMENT_CLIENT_COUNTS[$next_experiment_idx]}
-    if [ ${#AVAILABLE_GPUS[@]} -lt "$clients_needed" ]; then
-      break
+    if [ "$AUTO_GPU" -eq 0 ]; then
+      if [ ${#AVAILABLE_GPUS[@]} -lt "$clients_needed" ]; then
+        break
+      fi
     fi
 
     declare -a assigned=()
-    for ((i=0; i<clients_needed; i++)); do
-      assigned+=("${AVAILABLE_GPUS[0]}")
-      if [ ${#AVAILABLE_GPUS[@]} -gt 1 ]; then
-        AVAILABLE_GPUS=("${AVAILABLE_GPUS[@]:1}")
-      else
-        AVAILABLE_GPUS=()
+    if [ "$AUTO_GPU" -eq 0 ]; then
+      for ((i=0; i<clients_needed; i++)); do
+        assigned+=("${AVAILABLE_GPUS[0]}")
+        if [ ${#AVAILABLE_GPUS[@]} -gt 1 ]; then
+          AVAILABLE_GPUS=("${AVAILABLE_GPUS[@]:1}")
+        else
+          AVAILABLE_GPUS=()
+        fi
+      done
+    else
+      # In auto mode, pass allowed GPU set (if any) through assigned to limit selection;
+      # if CLIENT_GPU_LIST is empty, assigned stays empty to allow all GPUs.
+      if [ ${#AVAILABLE_GPUS[@]} -gt 0 ]; then
+        assigned=("${AVAILABLE_GPUS[@]}")
       fi
-    done
+    fi
 
     label="${EXPERIMENTS[$next_experiment_idx]}"
     port="${EXPERIMENT_PORTS[$next_experiment_idx]}"
@@ -473,18 +692,26 @@ while [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ] || [ ${#RUNNING_PIDS[@
       failures=$((failures + 1))
     fi
 
-    if [ -n "$gpu_str" ]; then
-      IFS=',' read -r -a released <<< "$gpu_str"
-      AVAILABLE_GPUS+=("${released[@]}")
+    if [ "$AUTO_GPU" -eq 0 ]; then
+      if [ -n "$gpu_str" ]; then
+        IFS=',' read -r -a released <<< "$gpu_str"
+        AVAILABLE_GPUS+=("${released[@]}")
+      fi
     fi
 
     RUNNING_PIDS=("${RUNNING_PIDS[@]:1}")
     RUNNING_LABELS=("${RUNNING_LABELS[@]:1}")
     RUNNING_GPUS=("${RUNNING_GPUS[@]:1}")
   elif [ "$scheduled" = false ] && [ "$next_experiment_idx" -lt "$TOTAL_EXPERIMENTS" ]; then
-    echo "Error: 当前可用 GPU 数不足以启动实验 ${EXPERIMENTS[$next_experiment_idx]}（需要 ${EXPERIMENT_CLIENT_COUNTS[$next_experiment_idx]} 张，现余 ${#AVAILABLE_GPUS[@]} 张）。"
-    failures=$((failures + 1))
-    break
+    if [ "$AUTO_GPU" -eq 0 ]; then
+      echo "Error: 当前可用 GPU 数不足以启动实验 ${EXPERIMENTS[$next_experiment_idx]}（需要 ${EXPERIMENT_CLIENT_COUNTS[$next_experiment_idx]} 张，现余 ${#AVAILABLE_GPUS[@]} 张）。"
+      failures=$((failures + 1))
+      break
+    else
+      # In auto mode, if scheduling failed unexpectedly, break to avoid busy loop
+      echo "Notice: 调度未成功，进入等待。"
+      sleep 2
+    fi
   else
     break
   fi

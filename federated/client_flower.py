@@ -1,6 +1,6 @@
 import argparse
 import time
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any, Optional, Sequence
 import sys
 import os
 from pathlib import Path
@@ -41,10 +41,15 @@ from bp_instruct import (
     generate_instruct_directions,
     generate_instruct_directions_with_R,
 )
+from federated.sparse_codec import encode_shared_sparse_dirs_from_flats
 
 
 def tensors_to_numpy(params: List[torch.nn.Parameter]) -> List[np.ndarray]:
     return [p.detach().cpu().numpy() for p in params]
+
+
+def tensor_param_bytes(params: Sequence[torch.nn.Parameter]) -> int:
+    return sum(int(p.numel() * p.element_size()) for p in params)
 
 
 def numpy_to_tensors(np_params: List[np.ndarray], params: List[torch.nn.Parameter]) -> None:
@@ -54,6 +59,28 @@ def numpy_to_tensors(np_params: List[np.ndarray], params: List[torch.nn.Paramete
         if tuple(arr.shape) != tuple(p.data.shape):
             raise ValueError(f"Shape mismatch: got {arr.shape}, expected {tuple(p.data.shape)}")
         p.data = torch.from_numpy(arr).to(p.device)
+
+
+def resolve_param_device(
+    params: List[torch.nn.Parameter],
+    fallback: Optional[torch.device] = None,
+) -> torch.device:
+    if params:
+        return params[0].device
+    if fallback is not None:
+        return fallback
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def resolve_runtime_device(device_pref: str) -> Tuple[str, torch.device]:
+    prefers_cuda = device_pref != "cpu"
+    if torch.cuda.is_available() and prefers_cuda:
+        try:
+            torch.zeros(1, device="cuda")
+            return "cuda", torch.device("cuda")
+        except Exception:
+            pass
+    return "cpu", torch.device("cpu")
 
 
 class ZOFLClient(fl.client.NumPyClient):
@@ -104,7 +131,9 @@ class ZOFLClient(fl.client.NumPyClient):
         self.muon_orthogonal_init = muon_orthogonal_init
         self.muon_hidden_size = muon_hidden_size
         self.zo_use_optimizer = zo_use_optimizer
-        self.device = device
+        self.device_type = device
+        self.device = torch.device("cuda" if self.device_type == "cuda" else "cpu")
+        self.torch_device = self.device
         self.csv_file = csv_file
         self.log_interval = max(1, int(log_interval))
         self.round_idx = 0
@@ -122,7 +151,7 @@ class ZOFLClient(fl.client.NumPyClient):
             self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         self.model = create_model(len(self.tokenizer)).to(self.device)
         # 多卡支持：若可见 GPU 数 > 1，使用 DataParallel
-        if self.device == 'cuda' and torch.cuda.device_count() > 1:
+        if self.device_type == 'cuda' and torch.cuda.device_count() > 1:
             self.model = torch.nn.DataParallel(self.model)
         self.model.train()
 
@@ -133,6 +162,7 @@ class ZOFLClient(fl.client.NumPyClient):
             p.requires_grad = False
         for p in self.trainable_params:
             p.requires_grad = True
+        self.torch_device = resolve_param_device(self.trainable_params, self.torch_device)
 
         # Optimizer for FO or ZO (when zo_use_optimizer)
         self.optimizer = None
@@ -194,10 +224,12 @@ class ZOFLClient(fl.client.NumPyClient):
         if parameters is None or len(parameters) == 0:
             return
         numpy_to_tensors(parameters, self.trainable_params)
+        self.torch_device = resolve_param_device(self.trainable_params, self.torch_device)
 
     def fit(self, parameters: List[np.ndarray], config: Dict[str, Any]):
         self.set_parameters_from_server(parameters)
-        compute_device = self.trainable_params[0].device if self.trainable_params else torch.device(self.device if self.device == "cuda" else "cpu")
+        compute_device = resolve_param_device(self.trainable_params, self.torch_device)
+        generator_device = compute_device.type if isinstance(compute_device, torch.device) else "cuda" if "cuda" in str(compute_device) else "cpu"
 
         start_time = time.time()
         total_loss = torch.zeros(1, device=compute_device, dtype=torch.float64)
@@ -233,26 +265,49 @@ class ZOFLClient(fl.client.NumPyClient):
         except Exception:
             in_param_bytes = 0
 
-        # Instruct：BP 阶段（仅 strong 客户端执行 BP 选择 top-k 种子）
-        if bool(config.get('instruct_enable', False)) and str(config.get('instruct_phase', '')) == 'bp_select':
+        instruct_enabled = bool(config.get('instruct_enable', False))
+        phase = str(config.get('instruct_phase', ''))
+        strong_action = str(config.get('strong_action', ''))
+        weak_action = str(config.get('weak_action', ''))
+        role_lower = str(self.role).lower()
+
+        # 第一轮 strong-only：weak 客户端直接跳过
+        if instruct_enabled and phase == 'strong_only' and role_lower != 'strong':
+            metrics = {
+                "client_id": self.client_id,
+                "round": server_round,
+                "mode": self.mode,
+                "role": self.role,
+                "strong_only_skip": True,
+                "comm_in_bytes": in_param_bytes,
+                "comm_out_bytes": tensor_param_bytes(self.trainable_params),
+            }
+            try:
+                print(f"[Client {self.client_id}][Round {server_round}] phase=strong_only role={self.role} skip", flush=True)
+            except Exception:
+                pass
+            self.round_idx = server_round
+            return [], len(self.trainloader.dataset), metrics
+
+        # 强客户端：计算 BP 梯度并生成近似方向，供服务器更新与下一轮弱客户端使用
+        if instruct_enabled and strong_action == 'bp_grad':
             metrics: Dict[str, Any] = {
                 "client_id": self.client_id,
                 "round": server_round,
                 "mode": self.mode,
                 "role": self.role,
-                "bp_select": True,
+                "phase": phase,
+                "strong_bp": True,
             }
-            if str(self.role).lower() != "strong":
+            if role_lower != "strong":
                 metrics["skipped_bp"] = True
-                # 输出通信：返回参数
-                out_param_bytes = sum(int(arr.nbytes) for arr in tensors_to_numpy(self.trainable_params))
                 metrics["comm_in_bytes"] = in_param_bytes
-                metrics["comm_out_bytes"] = out_param_bytes
+                metrics["comm_out_bytes"] = 0
                 log_csv_entry(server_round, 0, 0, 0.0, 0.0)
                 self.round_idx = server_round
-                return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+                return [], len(self.trainloader.dataset), metrics
 
-            # strong：读取候选种子并评估投影 g^T u（保留以便 Server 可用），并额外生成与 BP 梯度具有指定相似度的方向并发送
+            # 读取候选种子并评估投影 g^T u，额外生成与 BP 梯度具有指定相似度的方向
             try:
                 cand_json = config.get('bp_candidate_seeds_json', '[]')
                 candidate_seeds = json.loads(cand_json) if isinstance(cand_json, str) else list(cand_json)
@@ -261,8 +316,13 @@ class ZOFLClient(fl.client.NumPyClient):
             topk = int(config.get('bp_select_topk', max(1, int(config.get('instruct_zo_dir_count', 1)))))
             # instruct 方向生成配置
             instruct_dir_count = int(config.get('instruct_dir_count', topk))
+            # 兼容：服务端可直接下发 weak 数量 n_weak（覆盖 instruct_dir_count）
+            instruct_dir_count = int(config.get('n_weak', instruct_dir_count))
             instruct_cos_target = float(config.get('instruct_cosine_target', 0.9))
             instruct_dir_method = str(config.get('instruct_dir_method', 'orth')).lower()  # 'orth' or 'r'
+            noise_scale = float(config.get('instruct_noise_scale', 0.1))
+            noise_policy_cfg = str(config.get('instruct_noise_policy', 'zero')).lower()
+            sparse_enable = bool(config.get('instruct_sparse_enable', True))
             # 抽一小批数据来计算一次 BP 梯度
             bp_inputs = None
             bp_labels = None
@@ -272,12 +332,11 @@ class ZOFLClient(fl.client.NumPyClient):
                 break
             if bp_inputs is None:
                 metrics["skipped_bp"] = True
-                out_param_bytes = sum(int(arr.nbytes) for arr in tensors_to_numpy(self.trainable_params))
                 metrics["comm_in_bytes"] = in_param_bytes
-                metrics["comm_out_bytes"] = out_param_bytes
+                metrics["comm_out_bytes"] = 0
                 log_csv_entry(server_round, 0, 0, 0.0, 0.0)
                 self.round_idx = server_round
-                return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+                return [], len(self.trainloader.dataset), metrics
 
             _, bp_grads = compute_backprop_gradients(
                 self.model if not isinstance(self.model, torch.nn.DataParallel) else self.model.module,
@@ -287,10 +346,9 @@ class ZOFLClient(fl.client.NumPyClient):
                 bp_labels,
             )
             proj_vals: List[Tuple[int, float]] = []
-            torch_device = compute_device if isinstance(compute_device, torch.device) else self.device
             for seed in candidate_seeds:
                 try:
-                    gen = torch.Generator(device=torch_device).manual_seed(int(seed))
+                    gen = torch.Generator(device=generator_device).manual_seed(int(seed))
                 except Exception:
                     gen = torch.Generator().manual_seed(int(seed))
                 proj_accum = torch.zeros(1, device=compute_device, dtype=torch.float64)
@@ -313,6 +371,37 @@ class ZOFLClient(fl.client.NumPyClient):
             total_norm_value = float(total_norm.item())
             total_norm_sq_value = float(total_norm_sq.item())
             if total_norm_value > 0.0:
+                # 若启用稀疏并在服务端加噪，避免在客户端构造大规模掩码/能量扫描以降低显存峰值
+                sparse_enable = bool(config.get('instruct_sparse_enable', True))
+                if sparse_enable:
+                    d = int(sum(int(p.data.numel()) for p in self.trainable_params))
+                else:
+                    # 兼容原逻辑：根据 BP 能量选择高能索引
+                    grad_flat = torch.cat([g.detach().flatten().to(self.device) for g in bp_grads])
+                    d = int(grad_flat.numel())
+                    abs_sq = grad_flat.abs().pow(2)
+                    min_similarity = max(min(abs(instruct_cos_target), 0.9999), 0.9)
+                    energy_threshold = float((min_similarity ** 2) * total_norm_value * total_norm_value)
+                    k = min(64, d)
+                    while True:
+                        values, indices = torch.topk(abs_sq, k, largest=True)
+                        captured = float(values.sum().item())
+                        if captured >= energy_threshold or k >= d:
+                            break
+                        next_k = min(k * 2, d)
+                        if next_k == k:
+                            break
+                        k = next_k
+                    threshold_tensor = torch.tensor(energy_threshold, device=values.device, dtype=values.dtype)
+                    cumsum_values = torch.cumsum(values, dim=0)
+                    effective_rank_idx = torch.searchsorted(cumsum_values, threshold_tensor)
+                    effective_rank = int(effective_rank_idx.item()) + 1
+                    effective_rank = max(1, min(effective_rank, values.numel()))
+                    high_energy_indices = indices[:effective_rank]
+                    low_energy_mask = torch.ones(d, dtype=torch.bool, device=grad_flat.device)
+                    low_energy_mask[high_energy_indices] = False
+                    num_low_energy_dims = int(low_energy_mask.sum().item())
+
                 if instruct_dir_method == 'r':
                     dir_iter = generate_instruct_directions_with_R(
                         bp_grads,
@@ -320,7 +409,7 @@ class ZOFLClient(fl.client.NumPyClient):
                         instruct_cos_target,
                         total_norm_value,
                         total_norm_sq_value,
-                        device=self.device,
+                        device=self.device_type,
                     )
                 else:
                     dir_iter = generate_instruct_directions(
@@ -331,39 +420,78 @@ class ZOFLClient(fl.client.NumPyClient):
                         total_norm_sq_value,
                     )
                 if dir_iter is not None:
+                    dir_flats: List[torch.Tensor] = []
                     for dirs in dir_iter:
-                        gen_dirs.append([d.detach().clone() for d in dirs])
-            # 序列化方向（base64），包含每个参数形状
-            shapes = [list(p.data.shape) for p in self.trainable_params]
-            def _encode_dirs(directions: List[List[torch.Tensor]]) -> str:
-                payload: Dict[str, Any] = {
-                    "dtype": "float32",
-                    "shapes": shapes,
-                    "dirs": [],
-                }
-                for one in directions:
-                    per_param_b64: List[str] = []
-                    for d in one:
-                        arr = d.detach().to('cpu', dtype=torch.float32).numpy()
-                        per_param_b64.append(base64.b64encode(arr.tobytes()).decode('ascii'))
-                    payload["dirs"].append(per_param_b64)
-                return json.dumps(payload)
-            dir_blob_json = _encode_dirs(gen_dirs) if len(gen_dirs) > 0 else json.dumps({"dtype":"float32","shapes":shapes,"dirs":[]})
+                        # 将方向展平（不在客户端添加噪声），由 server 基于 seed/policy 复现
+                        flat_list = [t.detach().to(self.device) for t in dirs]
+                        direction_flat = torch.cat([t.view(-1) for t in flat_list])
+                        dir_flats.append(direction_flat.to(self.device, dtype=torch.float32).clone())
+                # 方向打包：优先稀疏，否则回退到原密集编码
+                shapes = [list(p.data.shape) for p in self.trainable_params]
+                if sparse_enable:
+                    try:
+                        # 生成可复现噪声种子（仅用于server复现，不在客户端加噪）
+                        noise_seed = int((server_round * 1000003) ^ (self.client_id * 911))
+                    except Exception:
+                        noise_seed = int(server_round) & 0x7fffffff
+                    sparse_json = encode_shared_sparse_dirs_from_flats(
+                        dir_flats if 'dir_flats' in locals() else [],
+                        d,
+                        shapes,
+                        total_norm_value,
+                        noise_seed=noise_seed,
+                        noise_policy=noise_policy_cfg,
+                        alpha=noise_scale,
+                        device=self.device,
+                    )
+                    dir_sparse_json = sparse_json
+                    dir_dense_json = None
+                else:
+                    # 回退：密集 base64 编码
+                    gen_dirs = []
+                    if 'dir_flats' in locals():
+                        # 将展平向量重新还原成每参数张量
+                        for direction_flat in dir_flats:
+                            restored: List[torch.Tensor] = []
+                            start = 0
+                            for p in self.trainable_params:
+                                sz = int(p.data.numel())
+                                chunk = direction_flat[start:start+sz].view_as(p.data).to(device=p.device, dtype=p.dtype)
+                                restored.append(chunk.detach().clone())
+                                start += sz
+                            gen_dirs.append(restored)
+                    def _encode_dirs(directions: List[List[torch.Tensor]]) -> str:
+                        payload: Dict[str, Any] = {
+                            "dtype": "float32",
+                            "shapes": shapes,
+                            "dirs": [],
+                        }
+                        for one in directions:
+                            per_param_b64: List[str] = []
+                            for d_t in one:
+                                arr = d_t.detach().to('cpu', dtype=torch.float32).numpy()
+                                per_param_b64.append(base64.b64encode(arr.tobytes()).decode('ascii'))
+                            payload["dirs"].append(per_param_b64)
+                        return json.dumps(payload)
+                    dir_dense_json = _encode_dirs(gen_dirs) if len(gen_dirs) > 0 else json.dumps({"dtype":"float32","shapes":shapes,"dirs":[]})
+                    dir_sparse_json = None
 
-            out_param_bytes = sum(int(arr.nbytes) for arr in tensors_to_numpy(self.trainable_params))
-            out_ctrl_bytes = int(4 * len(top_seeds) + 8 * len(top_projs)) + len(dir_blob_json.encode('utf-8'))
-            metrics.update({
-                "bp_top_seeds_json": json.dumps(top_seeds),
-                "bp_top_projs_json": json.dumps(top_projs),
-                "bp_candidate_count": len(candidate_seeds),
-                "bp_topk": topk,
-                "instruct_dir_blob_json": dir_blob_json,
-                "instruct_dir_count": len(gen_dirs),
-                "instruct_cosine_target": instruct_cos_target,
-                "instruct_dir_method": instruct_dir_method,
-                "comm_in_bytes": in_param_bytes + int(4 * len(candidate_seeds)),
-                "comm_out_bytes": out_param_bytes + out_ctrl_bytes,
-            })
+            # 序列化 BP 梯度向量
+            grad_payload: Dict[str, Any] = {
+                "dtype": "float32",
+                "shapes": shapes,
+                "grads": [],
+            }
+            for g in bp_grads:
+                arr = g.detach().to('cpu', dtype=torch.float32).numpy()
+                grad_payload["grads"].append(base64.b64encode(arr.tobytes()).decode('ascii'))
+            grad_blob_json = json.dumps(grad_payload)
+
+            grad_norm_sq = torch.zeros(1, device=compute_device, dtype=torch.float64)
+            for g in bp_grads:
+                grad_norm_sq = grad_norm_sq + torch.sum(g.detach().to(grad_norm_sq.device, dtype=grad_norm_sq.dtype) * g.detach().to(grad_norm_sq.device, dtype=grad_norm_sq.dtype))
+            grad_norm = torch.sqrt(grad_norm_sq.clamp_min(0.0))
+
             bp_loss_value = 0.0
             try:
                 was_training = self.model.training
@@ -382,15 +510,48 @@ class ZOFLClient(fl.client.NumPyClient):
                     self.model.train()
             except Exception:
                 bp_loss_value = 0.0
-            log_csv_entry(server_round, 0, 1, bp_loss_value, float(total_norm_value))
+
+            out_param_bytes = 0
+            out_ctrl_bytes = (
+                int(4 * len(top_seeds) + 8 * len(top_projs))
+                + (len(dir_sparse_json.encode('utf-8')) if sparse_enable and dir_sparse_json else len((dir_dense_json or "").encode('utf-8')))
+                + len(grad_blob_json.encode('utf-8'))
+            )
+            metrics.update({
+                "bp_top_seeds_json": json.dumps(top_seeds),
+                "bp_top_projs_json": json.dumps(top_projs),
+                "bp_candidate_count": len(candidate_seeds),
+                "bp_topk": topk,
+                **({"instruct_dir_sparse_json": dir_sparse_json} if sparse_enable and dir_sparse_json else {}),
+                **({"instruct_dir_blob_json": dir_dense_json} if (not sparse_enable) and dir_dense_json else {}),
+                "instruct_dir_count": (
+                    len(json.loads(dir_sparse_json).get("values_b64", [])) if (sparse_enable and dir_sparse_json)
+                    else (len(json.loads(dir_dense_json).get("dirs", [])) if (not sparse_enable and dir_dense_json) else 0)
+                ),
+                "instruct_cosine_target": instruct_cos_target,
+                "instruct_dir_method": instruct_dir_method,
+                "strong_grad_blob_json": grad_blob_json,
+                "strong_grad_norm": float(grad_norm.item()),
+                "strong_bp_loss": float(bp_loss_value),
+                "comm_in_bytes": in_param_bytes + int(4 * len(candidate_seeds)),
+                "comm_out_bytes": out_param_bytes + out_ctrl_bytes,
+            })
+            try:
+                print(
+                    f"[Client {self.client_id}][Round {server_round}] phase={phase} role={self.role} "
+                    f"bp_loss={bp_loss_value:.6f} grad_norm={float(total_norm_value):.6f}",
+                    flush=True,
+                )
+            except Exception:
+                pass
             self.round_idx = server_round
-            return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+            return [], len(self.trainloader.dataset), metrics
 
         # Server-side ZO path: clients do NOT update params; only report directional derivatives
         if (self.mode == 'ZO') and bool(config.get('zo_server_side', False)):
-            # Instruct：ZO 评估阶段仅 weak 客户端执行
-            if bool(config.get('instruct_enable', False)) and str(config.get('instruct_phase', '')) == 'zo_eval':
-                if str(self.role).lower() != "weak":
+            # Instruct：joint 阶段 weak 客户端执行 ZO 评估
+            if instruct_enabled:
+                if role_lower != "weak" or weak_action not in ("zo_eval", "joint", "joint_eval"):
                     metrics = {
                         "client_id": self.client_id,
                         "train_time_s": time.time() - start_time,
@@ -401,11 +562,12 @@ class ZOFLClient(fl.client.NumPyClient):
                         "round": server_round,
                         "lr": self.lr,
                         "skipped_zo_eval": True,
+                        "phase": phase,
                         "comm_in_bytes": in_param_bytes,
-                        "comm_out_bytes": sum(int(arr.nbytes) for arr in tensors_to_numpy(self.trainable_params)),
+                        "comm_out_bytes": 0,
                     }
                     self.round_idx = server_round
-                    return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+                    return [], len(self.trainloader.dataset), metrics
             epsilon = float(config.get('zo_epsilon', 1e-4))
             # 优先使用服务端下发的“指令方向” blob；若不存在则回退到 seeds
             dir_blob_json = config.get('instruct_dir_blob_json', None)
@@ -498,7 +660,7 @@ class ZOFLClient(fl.client.NumPyClient):
             else:
                 # 回退：按 seeds 构建方向
                 for seed in dir_seeds:
-                    gen = torch.Generator(device=self.device if self.device == 'cuda' else 'cpu').manual_seed(int(seed))
+                    gen = torch.Generator(device=generator_device).manual_seed(int(seed))
                     dirs: List[torch.Tensor] = []
                     for p in self.trainable_params:
                         u = torch.randn(p.data.shape, generator=gen, device=p.device, dtype=p.dtype)
@@ -523,13 +685,25 @@ class ZOFLClient(fl.client.NumPyClient):
                 "q": self.q if self.mode == 'ZO' else -1,
                 "round": server_round,
                 "lr": self.lr,
+                "role": self.role,
                 "zo_dir_g_json": json.dumps(g_dir_list),
                 "comm_in_bytes": incoming_ctrl_bytes,
-                "comm_out_bytes": sum(int(arr.nbytes) for arr in tensors_to_numpy(self.trainable_params)) + int(8 * len(g_dir_list)),
+                "comm_out_bytes": int(8 * len(g_dir_list)),
+                "baseline_loss": float(baseline_loss),
+                "baseline_steps": int(baseline_steps),
+                "weak_grad_norm": float(grad_norm_dirs),
             }
+            try:
+                print(
+                    f"[Client {self.client_id}][Round {server_round}] phase={phase} role={self.role} "
+                    f"baseline_loss={baseline_loss:.6f} grad_norm={grad_norm_dirs:.6f}",
+                    flush=True,
+                )
+            except Exception:
+                pass
             self.round_idx = server_round
             # return parameters unchanged
-            return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+            return [], len(self.trainloader.dataset), metrics
 
         # Local training
         epsilon = 1e-4
@@ -626,12 +800,12 @@ class ZOFLClient(fl.client.NumPyClient):
         # 更新本地轮次索引
         self.round_idx = server_round
 
-        return tensors_to_numpy(self.trainable_params), len(self.trainloader.dataset), metrics
+        return [], len(self.trainloader.dataset), metrics
 
     def evaluate(self, parameters: List[np.ndarray], config: Dict[str, Any]):
         self.set_parameters_from_server(parameters)
         self.model.eval()
-        compute_device = self.trainable_params[0].device if self.trainable_params else torch.device(self.device if self.device == "cuda" else "cpu")
+        compute_device = resolve_param_device(self.trainable_params, self.torch_device)
         total_loss = torch.zeros(1, device=compute_device, dtype=torch.float64)
         steps = 0
         with torch.no_grad():
@@ -699,19 +873,7 @@ def main():
             ids = ",".join(str(i) for i in range(int(args.gpus)))
             os.environ["CUDA_VISIBLE_DEVICES"] = ids
 
-    # 设备选择与 CUDA 自检
-    if args.device == "cpu":
-        device = "cpu"
-    elif args.device == "cuda":
-        device = "cuda"
-    else:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    if device == "cuda":
-        try:
-            _ = torch.zeros(1, device="cuda")  # 触发 CUDA 上下文初始化
-        except Exception:
-            device = "cpu"
+    device, _ = resolve_runtime_device(args.device)
 
     # 自动生成实验目录与 CSV 路径
     def _format_lr(x: float) -> str:

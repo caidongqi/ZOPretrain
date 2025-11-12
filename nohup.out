@@ -142,3 +142,138 @@ Assigning GPUs [5] to server_zo:sgd (port 8301)
 === [1/6] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
 
 === [2/6] Running server_zo mode with sgd optimizer on 127.0.0.1:8301 ===
+federated_parallel_sweep.sh: line 301: 64211 Terminated              "${client_cmd[@]}" > "$client_log" 2>&1
+Client failure detected; terminating server.
+federated_parallel_sweep.sh: line 301: 64212 Terminated              "${client_cmd[@]}" > "$client_log" 2>&1
+Client failure detected; terminating server.
+Experiment instruct:sgd failed.
+Assigning GPUs [2,3] to instruct:adam (port 8302)
+
+=== [3/6] Running instruct mode with adam optimizer on 127.0.0.1:8302 ===
+Total experiments: 6
+Error: 每个实验最多需要 9 张卡，但当前 GPU 列表只有 3 项。请扩充 --client-gpus 或减少实验并行度。
+Total experiments: 6
+Assigning GPUs [2,3,5] to instruct:sgd (port 8300)
+Assigning GPUs [2,3,5] to server_zo:sgd (port 8301)
+Assigning GPUs [2,3,5] to instruct:adam (port 8302)
+
+=== [1/6] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
+
+=== [2/6] Running server_zo mode with sgd optimizer on 127.0.0.1:8301 ===
+Assigning GPUs [2,3,5] to server_zo:adam (port 8303)
+Assigning GPUs [2,3,5] to instruct:muon (port 8304)
+
+=== [4/6] Running server_zo mode with adam optimizer on 127.0.0.1:8303 ===
+Assigning GPUs [2,3,5] to server_zo:muon (port 8305)
+
+=== [3/6] Running instruct mode with adam optimizer on 127.0.0.1:8302 ===
+
+=== [6/6] Running server_zo mode with muon optimizer on 127.0.0.1:8305 ===
+
+=== [5/6] Running instruct mode with muon optimizer on 127.0.0.1:8304 ===
+Client failure detected; terminating server.
+Client failure detected; terminating server.
+Client failure detected; terminating server.
+Total experiments: 6
+Assigning GPUs [0,2,6] to instruct:sgd (port 8300)
+Assigning GPUs [0,2,6] to server_zo:sgd (port 8301)
+Assigning GPUs [0,2,6] to instruct:adam (port 8302)
+
+=== [1/6] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
+Assigning GPUs [0,2,6] to server_zo:adam (port 8303)
+
+=== [2/6] Running server_zo mode with sgd optimizer on 127.0.0.1:8301 ===
+Assigning GPUs [0,2,6] to instruct:muon (port 8304)
+
+=== [3/6] Running instruct mode with adam optimizer on 127.0.0.1:8302 ===
+Assigning GPUs [0,2,6] to server_zo:muon (port 8305)
+
+=== [4/6] Running server_zo mode with adam optimizer on 127.0.0.1:8303 ===
+
+=== [5/6] Running instruct mode with muon optimizer on 127.0.0.1:8304 ===
+
+=== [6/6] Running server_zo mode with muon optimizer on 127.0.0.1:8305 ===
+Client failure detected; terminating server.
+Client failure detected; terminating server.
+Client failure detected; terminating server.
+Total experiments: 3
+Assigning GPUs [0,2,6] to instruct:sgd (port 8300)
+Assigning GPUs [0,2,6] to instruct:adam (port 8301)
+Assigning GPUs [0,2,6] to instruct:muon (port 8302)
+
+=== [1/3] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
+
+=== [2/3] Running instruct mode with adam optimizer on 127.0.0.1:8301 ===
+
+=== [3/3] Running instruct mode with muon optimizer on 127.0.0.1:8302 ===
+Total experiments: 3
+Assigning GPUs [0,2,6] to instruct:sgd (port 8300)
+Assigning GPUs [0,2,6] to instruct:adam (port 8301)
+Assigning GPUs [0,2,6] to instruct:muon (port 8302)
+
+=== [1/3] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
+
+=== [3/3] Running instruct mode with muon optimizer on 127.0.0.1:8302 ===
+
+=== [2/3] Running instruct mode with adam optimizer on 127.0.0.1:8301 ===
+Total experiments: 3
+Assigning GPUs [0,2,6] to instruct:sgd (port 8300)
+Assigning GPUs [0,2,6] to instruct:adam (port 8301)
+Assigning GPUs [0,2,6] to instruct:muon (port 8302)
+
+=== [1/3] Running instruct mode with sgd optimizer on 127.0.0.1:8300 ===
+
+=== [3/3] Running instruct mode with muon optimizer on 127.0.0.1:8302 ===
+
+=== [2/3] Running instruct mode with adam optimizer on 127.0.0.1:8301 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,2,6] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,4,5] to instruct:adam (port 8300)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8300 ===
+Total experiments: 1
+Assigning GPUs [0,4,5] to instruct:adam (port 8309)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8309 ===
+Client failure detected; terminating server.
+Experiment instruct:adam failed.
+1 experiment(s) failed.
+Total experiments: 1
+Assigning GPUs [0,4,5] to instruct:adam (port 8319)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===
