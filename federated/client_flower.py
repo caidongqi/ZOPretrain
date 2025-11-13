@@ -41,7 +41,7 @@ from bp_instruct import (
     generate_instruct_directions,
     generate_instruct_directions_with_R,
 )
-from federated.sparse_codec import encode_shared_sparse_dirs_from_flats
+from federated.sparse_codec import encode_shared_sparse_dirs_from_flats, decode_shared_sparse_dirs_to_numpy
 
 
 def tensors_to_numpy(params: List[torch.nn.Parameter]) -> List[np.ndarray]:
@@ -154,6 +154,11 @@ class ZOFLClient(fl.client.NumPyClient):
         if self.device_type == 'cuda' and torch.cuda.device_count() > 1:
             self.model = torch.nn.DataParallel(self.model)
         self.model.train()
+        # 记录 pad id 以统计有效 token 数
+        try:
+            self.pad_token_id = int(self.tokenizer.pad_token_id) if self.tokenizer.pad_token_id is not None else None
+        except Exception:
+            self.pad_token_id = None
 
         # Trainable parameters subset
         base_model = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
@@ -231,10 +236,32 @@ class ZOFLClient(fl.client.NumPyClient):
         compute_device = resolve_param_device(self.trainable_params, self.torch_device)
         generator_device = compute_device.type if isinstance(compute_device, torch.device) else "cuda" if "cuda" in str(compute_device) else "cpu"
 
+        # 若服务器下发了稀疏更新（含seed噪声），在本地直接应用（避免下发全量参数）
+        try:
+            update_json = config.get("server_update_sparse_json", None)
+            if update_json:
+                decoded = decode_shared_sparse_dirs_to_numpy(str(update_json), apply_noise=True, device=self.device)
+                if decoded and len(decoded) > 0:
+                    per_param = decoded[0]
+                    if len(per_param) == len(self.trainable_params):
+                        for p, arr in zip(self.trainable_params, per_param):
+                            p.data.add_(torch.from_numpy(arr).to(p.device, dtype=p.dtype))
+        except Exception:
+            pass
+
         start_time = time.time()
         total_loss = torch.zeros(1, device=compute_device, dtype=torch.float64)
         step_count = 0
+        tokens_this_round = 0
         server_round = int(config.get('server_round', self.round_idx + 1))
+
+        def count_tokens(batch_ids: torch.Tensor) -> int:
+            try:
+                if self.pad_token_id is not None:
+                    return int((batch_ids != self.pad_token_id).sum().item())
+                return int(batch_ids.numel())
+            except Exception:
+                return int(batch_ids.numel()) if hasattr(batch_ids, "numel") else 0
 
         def log_csv_entry(server_round_val: int, epoch_val: int, step_val: int, loss_val: float, grad_val: float) -> None:
             if self.csv_file is None:
@@ -270,6 +297,8 @@ class ZOFLClient(fl.client.NumPyClient):
         strong_action = str(config.get('strong_action', ''))
         weak_action = str(config.get('weak_action', ''))
         role_lower = str(self.role).lower()
+        # instruct 模式下仅统计 strong 端 BP 的 token；其余情况按原逻辑
+        count_tokens_enabled = (not instruct_enabled) or (instruct_enabled and role_lower == "strong" and strong_action == "bp_grad")
 
         # 第一轮 strong-only：weak 客户端直接跳过
         if instruct_enabled and phase == 'strong_only' and role_lower != 'strong':
@@ -281,6 +310,7 @@ class ZOFLClient(fl.client.NumPyClient):
                 "strong_only_skip": True,
                 "comm_in_bytes": in_param_bytes,
                 "comm_out_bytes": tensor_param_bytes(self.trainable_params),
+                "tokens_this_round": int(tokens_this_round),
             }
             try:
                 print(f"[Client {self.client_id}][Round {server_round}] phase=strong_only role={self.role} skip", flush=True)
@@ -334,6 +364,7 @@ class ZOFLClient(fl.client.NumPyClient):
                 metrics["skipped_bp"] = True
                 metrics["comm_in_bytes"] = in_param_bytes
                 metrics["comm_out_bytes"] = 0
+                metrics["tokens_this_round"] = int(tokens_this_round)
                 log_csv_entry(server_round, 0, 0, 0.0, 0.0)
                 self.round_idx = server_round
                 return [], len(self.trainloader.dataset), metrics
@@ -345,6 +376,11 @@ class ZOFLClient(fl.client.NumPyClient):
                 bp_inputs,
                 bp_labels,
             )
+            # Instruct 模式：仅统计 BP 使用的一批 token
+            try:
+                tokens_this_round += count_tokens(bp_inputs)
+            except Exception:
+                pass
             proj_vals: List[Tuple[int, float]] = []
             for seed in candidate_seeds:
                 try:
@@ -535,6 +571,7 @@ class ZOFLClient(fl.client.NumPyClient):
                 "strong_bp_loss": float(bp_loss_value),
                 "comm_in_bytes": in_param_bytes + int(4 * len(candidate_seeds)),
                 "comm_out_bytes": out_param_bytes + out_ctrl_bytes,
+                "tokens_this_round": int(tokens_this_round),
             })
             try:
                 print(
@@ -574,17 +611,19 @@ class ZOFLClient(fl.client.NumPyClient):
             eval_steps = int(config.get('zo_eval_steps', 1))
             provided_dirs: List[List[torch.Tensor]] = []
 
-            def _compute_loss_current() -> Tuple[float, int]:
+            def _compute_loss_current() -> Tuple[float, int, int]:
                 was_training = self.model.training
                 if was_training:
                     self.model.eval()
                 total = torch.zeros(1, device=compute_device, dtype=torch.float64)
                 steps_local = 0
+                tokens_used = 0
                 try:
                     with torch.no_grad():
                         for batch in self.trainloader:
                             inputs = batch.to(self.device)
                             labels = inputs.clone()
+                            tokens_used += count_tokens(inputs)
                             logits = self.model(inputs).logits
                             shift_logits = logits[:, :-1, :].contiguous()
                             shift_labels = labels[:, 1:].contiguous()
@@ -599,9 +638,11 @@ class ZOFLClient(fl.client.NumPyClient):
                 finally:
                     if was_training:
                         self.model.train()
-                return float((total / max(steps_local, 1)).item()), steps_local
+                return float((total / max(steps_local, 1)).item()), steps_local, int(tokens_used)
 
-            baseline_loss, baseline_steps = _compute_loss_current()
+            baseline_loss, baseline_steps, baseline_tokens = _compute_loss_current()
+            if count_tokens_enabled:
+                tokens_this_round += int(baseline_tokens)
             if dir_blob_json:
                 try:
                     blob = json.loads(dir_blob_json)
@@ -634,13 +675,13 @@ class ZOFLClient(fl.client.NumPyClient):
                     except Exception:
                         dir_seeds = []
 
-            def _loss_with_perturb(sign: float, dirs: List[torch.Tensor]) -> float:
+            def _loss_with_perturb(sign: float, dirs: List[torch.Tensor]) -> Tuple[float, int]:
                 # apply
                 for p, u in zip(self.trainable_params, dirs):
                     p.data.add_(sign * epsilon * u.to(p.device))
                 try:
-                    loss_value, _ = _compute_loss_current()
-                    return loss_value
+                    loss_value, _, tokens_used = _compute_loss_current()
+                    return loss_value, int(tokens_used)
                 finally:
                     # revert
                     for p, u in zip(self.trainable_params, dirs):
@@ -651,8 +692,10 @@ class ZOFLClient(fl.client.NumPyClient):
             if provided_dirs:
                 # 沿“指令方向”前向有限差分
                 for dirs in provided_dirs:
-                    lp = _loss_with_perturb(+1.0, dirs)
-                    lm = _loss_with_perturb(-1.0, dirs)
+                    lp, tok_p = _loss_with_perturb(+1.0, dirs)
+                    lm, tok_m = _loss_with_perturb(-1.0, dirs)
+                    if count_tokens_enabled:
+                        tokens_this_round += int(tok_p + tok_m)
                     g_dir = (lp - lm) / (2.0 * epsilon)
                     g_dir_list.append(float(g_dir))
                 # 统计控制负载
@@ -665,8 +708,10 @@ class ZOFLClient(fl.client.NumPyClient):
                     for p in self.trainable_params:
                         u = torch.randn(p.data.shape, generator=gen, device=p.device, dtype=p.dtype)
                         dirs.append(u)
-                    lp = _loss_with_perturb(+1.0, dirs)
-                    lm = _loss_with_perturb(-1.0, dirs)
+                    lp, tok_p = _loss_with_perturb(+1.0, dirs)
+                    lm, tok_m = _loss_with_perturb(-1.0, dirs)
+                    if count_tokens_enabled:
+                        tokens_this_round += int(tok_p + tok_m)
                     g_dir = (lp - lm) / (2.0 * epsilon)
                     g_dir_list.append(float(g_dir))
                 incoming_ctrl_bytes += int(4 * len(dir_seeds))
@@ -692,6 +737,7 @@ class ZOFLClient(fl.client.NumPyClient):
                 "baseline_loss": float(baseline_loss),
                 "baseline_steps": int(baseline_steps),
                 "weak_grad_norm": float(grad_norm_dirs),
+                "tokens_this_round": int(tokens_this_round),
             }
             try:
                 print(
@@ -723,6 +769,9 @@ class ZOFLClient(fl.client.NumPyClient):
                         shift_labels.view(-1),
                     )
                     loss.backward()
+                    # token 计数（每步一次前向）
+                    if count_tokens_enabled:
+                        tokens_this_round += count_tokens(inputs)
                     # 计算梯度范数（FO）
                     grad_norm_sq = torch.zeros(1, device=compute_device, dtype=torch.float64)
                     for p in self.trainable_params:
@@ -740,6 +789,12 @@ class ZOFLClient(fl.client.NumPyClient):
                             shift_logits.view(-1, shift_logits.size(-1)),
                             shift_labels.view(-1),
                         )
+                    # 近似统计：ZO 每步约 2*q 次前向
+                    if count_tokens_enabled:
+                        try:
+                            tokens_this_round += int(count_tokens(inputs) * max(1, int(2 * self.q)))
+                        except Exception:
+                            tokens_this_round += count_tokens(inputs)
 
                     grad_paramwise = zo_gradient_estimator(
                         self.model,
@@ -791,6 +846,7 @@ class ZOFLClient(fl.client.NumPyClient):
             "train_time_s": time.time() - start_time,
             "avg_loss": float((total_loss / max(step_count, 1)).item()),
             "steps": step_count,
+            "tokens_this_round": int(tokens_this_round),
             "mode": self.mode,
             "q": self.q if self.mode == 'ZO' else -1,
             "round": server_round,

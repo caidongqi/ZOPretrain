@@ -277,3 +277,18 @@ Total experiments: 1
 Assigning GPUs [0,4,5] to instruct:adam (port 8319)
 
 === [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===
+Total experiments: 1
+Assigning GPUs [0,4,5] to instruct:adam (port 8319)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===
+Total experiments: 1
+Assigning GPUs [2,4,5] to instruct:adam (port 8319)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===
+Client failure detected; terminating server.
+Experiment instruct:adam failed.
+1 experiment(s) failed.
+Total experiments: 1
+Assigning GPUs [2,4,5] to instruct:adam (port 8319)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===

@@ -6,6 +6,7 @@ import os
 import sys
 from pathlib import Path
 import csv
+from datetime import datetime
 import numpy as np
 import torch
 import flwr as fl
@@ -17,7 +18,7 @@ PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from federated.sparse_codec import decode_shared_sparse_dirs_to_numpy
+from federated.sparse_codec import decode_shared_sparse_dirs_to_numpy, encode_shared_sparse_dirs_from_flats
 
 def resolve_runtime_device(device_pref: str) -> Tuple[str, torch.device, str]:
     prefers_cuda = device_pref != "cpu"
@@ -98,7 +99,14 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         self._opt = None  # type: ignore[var-annotated]
         self._params = None  # type: ignore[var-annotated]
         self._csv_path: Optional[Path] = Path(server_csv_path).resolve() if server_csv_path else None
+        # 下行更新（server->client）缓存：发送稀疏更新（含seed噪声），避免每轮下发全量参数
+        self._server_update_sparse_json: Optional[str] = None
+        # 简单稀疏率（按维度的比例选 Top-k），0.001 表示取 0.1% 最高幅值分量
+        self._downlink_topk_ratio: float = 1e-3
+        # 本轮下行参数字节统计（在 configure_fit 中设置，aggregate_fit 中读取写入）
+        self._downlink_param_bytes_last: int = 0
         self._csv_fieldnames = [
+            "timestamp",
             "round",
             "phase",
             "strong_clients",
@@ -110,6 +118,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             "weak_grad_norm",
             "final_grad_norm",
             "total_weight",
+            "uplink_param_bytes",
+            "downlink_param_bytes",
+            "tokens",
         ]
         if self._csv_path:
             try:
@@ -148,8 +159,20 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 self._opt = None
         except Exception:
             pass
-        # 继续使用 FedAvg 默认的调度（我们仅存储了参数快照）
-        return super().configure_fit(rnd, parameters, client_manager)
+        # 自定义：不再下发全量参数，转为仅通过 config 下发“稀疏更新”与控制字段
+        cfg = self._on_fit_config_fn(rnd)
+        if self._server_update_sparse_json:
+            cfg["server_update_sparse_json"] = self._server_update_sparse_json
+            try:
+                self._downlink_param_bytes_last = int(len(self._server_update_sparse_json.encode("utf-8")))
+            except Exception:
+                self._downlink_param_bytes_last = 0
+        else:
+            self._downlink_param_bytes_last = 0
+        fit_ins = fl.common.FitIns(fl.common.ndarrays_to_parameters([]), cfg)
+        sample_size, min_num_clients = self.num_fit_clients(client_manager.num_available())
+        clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
+        return [(client, fit_ins) for client in clients]
 
     def _write_csv_row(self, data: Dict[str, Any]) -> None:
         if not self._csv_path:
@@ -253,6 +276,24 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         if len(results) == 0:
             if self._params is not None:
                 new_nds_now = [p.data.detach().to("cpu").numpy() for p in self._params]
+                # 记录空聚合一行（带上下行参数字节）
+                csv_row_empty: Dict[str, Any] = {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "round": rnd,
+                    "phase": self._phase(rnd),
+                    "strong_clients": 0,
+                    "weak_clients": 0,
+                    "loss": "",
+                    "strong_bp_loss": "",
+                    "weak_baseline_loss": "",
+                    "strong_grad_norm": "",
+                    "weak_grad_norm": "",
+                    "final_grad_norm": "",
+                    "total_weight": 0.0,
+                    "uplink_param_bytes": 0,
+                    "downlink_param_bytes": int(self._downlink_param_bytes_last),
+                }
+                self._write_csv_row(csv_row_empty)
                 return ndarrays_to_parameters(new_nds_now), {}
             return super().aggregate_fit(rnd, results, failures)
 
@@ -268,6 +309,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             if len(nds) == 0:
                 # 仍无法获得参数，跳过更新但写入一行
                 self._write_csv_row({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "round": rnd,
                     "phase": phase,
                     "strong_clients": 0,
@@ -290,6 +332,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         # 汇总通信字节（若客户端上报）
         in_bytes_list: List[float] = []
         out_bytes_list: List[float] = []
+        # 汇总“参数”字节：上行（FitRes.parameters）与本轮下行参数（上一阶段 configure_fit 已统计）
+        uplink_param_bytes_total = 0
+        tokens_total = 0
         for _, res in results:
             m = res.metrics or {}
             in_bytes = float(m.get("comm_in_bytes", 0.0))
@@ -298,6 +343,20 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 in_bytes_list.append(in_bytes)
             if out_bytes > 0:
                 out_bytes_list.append(out_bytes)
+            # tokens 本轮（客户端上报）
+            try:
+                t = int(m.get("tokens_this_round", 0))
+                if t > 0:
+                    tokens_total += t
+            except Exception:
+                pass
+            # FitRes.parameters 转 numpy 后求 nbytes
+            try:
+                if res.parameters is not None:
+                    nds_local = parameters_to_ndarrays(res.parameters)
+                    uplink_param_bytes_total += int(sum(int(arr.nbytes) for arr in nds_local))
+            except Exception:
+                pass
 
         # 统计 strong 梯度
         strong_grad_sums: List[torch.Tensor] = [
@@ -431,6 +490,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             avg_s2c = float(torch.tensor(in_bytes_list, device=torch_device, dtype=torch.float64).mean().item()) if in_bytes_list else 0.0
             # 也写入一行 CSV（loss 留空），保证每轮都有记录
             csv_row_empty: Dict[str, Any] = {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "round": rnd,
                 "phase": phase,
                 "strong_clients": strong_count,
@@ -442,6 +502,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 "weak_grad_norm": "",
                 "final_grad_norm": "",
                 "total_weight": 0.0,
+                "uplink_param_bytes": int(uplink_param_bytes_total),
+                "downlink_param_bytes": int(self._downlink_param_bytes_last),
+                "tokens": int(tokens_total),
             }
             self._write_csv_row(csv_row_empty)
             metrics: Dict[str, fl.common.Scalar] = {
@@ -451,6 +514,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 "avg_comm_client_to_server_bytes": avg_c2s,
                 "avg_comm_server_to_client_bytes": avg_s2c,
                 "skipped_update": True,
+                "uplink_param_bytes_total": int(uplink_param_bytes_total),
+                "downlink_param_bytes_total": int(self._downlink_param_bytes_last),
+                "tokens_total": int(tokens_total),
             }
             return ndarrays_to_parameters(nds), metrics
 
@@ -551,6 +617,43 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         self._weak_dirs_in_use = []
         self._weak_seed_list_in_use = []
 
+        # 计算并编码“下发给客户端的稀疏更新”（基于最终梯度张量），以减少下行带宽
+        try:
+            # 形成一次性展平向量（在设备上操作）
+            update_tensors = [(-self.server_lr) * g.to(device=torch_device, dtype=torch.float32) for g in final_grad_tensors]
+            flat_update = torch.cat([t.view(-1) for t in update_tensors]).to(torch_device)
+            d = int(flat_update.numel())
+            k = int(max(1, min(d, int(self._downlink_topk_ratio * d))))
+            if 0 < k < d:
+                abs_vals = torch.abs(flat_update)
+                idx = torch.topk(abs_vals, k, largest=True, sorted=False).indices
+                sparse_flat = torch.zeros_like(flat_update)
+                sparse_flat.index_copy_(0, idx, flat_update.index_select(0, idx))
+            else:
+                sparse_flat = flat_update
+            shapes = [list(w.shape) for w in w_tensors]
+            # 噪声参数：使用与 Instruct 相同字段的默认值
+            noise_policy = "zero"
+            noise_alpha = 0.1
+            try:
+                seed = int((rnd * 1000003) ^ 0x5A5A5A5A)
+            except Exception:
+                seed = int(rnd) & 0x7fffffff
+            total_norm = float(torch.linalg.vector_norm(sparse_flat.detach()).item())
+            payload = encode_shared_sparse_dirs_from_flats(
+                [sparse_flat],
+                d,
+                shapes,
+                total_norm,
+                noise_seed=seed,
+                noise_policy=noise_policy,
+                alpha=noise_alpha,
+                device=torch_device,
+            )
+            self._server_update_sparse_json = payload
+        except Exception:
+            self._server_update_sparse_json = None
+
         avg_c2s = float(torch.tensor(out_bytes_list, device=torch_device, dtype=torch.float64).mean().item()) if out_bytes_list else 0.0
         avg_s2c = float(torch.tensor(in_bytes_list, device=torch_device, dtype=torch.float64).mean().item()) if in_bytes_list else 0.0
         with torch.no_grad():
@@ -568,6 +671,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             "avg_comm_server_to_client_bytes": avg_s2c,
             "total_weight": float(total_weight),
             "final_grad_norm": float(final_grad_norm),
+            "uplink_param_bytes_total": int(uplink_param_bytes_total),
+            "downlink_param_bytes_total": int(self._downlink_param_bytes_last),
+            "tokens_total": int(tokens_total),
         }
         if strong_grad_norm_mean is not None:
             metrics["strong_grad_norm"] = float(strong_grad_norm_mean)
@@ -586,6 +692,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             loss_value = float(strong_loss_mean)
 
         csv_row: Dict[str, Any] = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "round": rnd,
             "phase": phase,
             "strong_clients": strong_count,
@@ -597,6 +704,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             "weak_grad_norm": "" if weak_grad_norm_mean is None else float(weak_grad_norm_mean),
             "final_grad_norm": float(final_grad_norm),
             "total_weight": float(total_weight),
+            "uplink_param_bytes": int(uplink_param_bytes_total),
+            "downlink_param_bytes": int(self._downlink_param_bytes_last),
+            "tokens": int(tokens_total),
         }
         self._write_csv_row(csv_row)
         try:
@@ -604,6 +714,8 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 f"[Instruct][Round {rnd}] phase={phase} strong={strong_count} weak={weak_count} "
                   f"avg_c->s={metrics['avg_comm_client_to_server_bytes']:.1f}B "
                 f"avg_s->c={metrics['avg_comm_server_to_client_bytes']:.1f}B "
+                f"up_param={int(uplink_param_bytes_total)}B down_param={int(self._downlink_param_bytes_last)}B "
+                f"tokens={int(tokens_total)} "
                 f"||g_strong||={metrics.get('strong_grad_norm', 0.0):.3e} ||g_weak||={metrics.get('weak_grad_norm', 0.0):.3e} "
                 f"||g_final||={metrics['final_grad_norm']:.3e}",
                 flush=True,
