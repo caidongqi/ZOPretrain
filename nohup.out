@@ -292,3 +292,171 @@ Total experiments: 1
 Assigning GPUs [2,4,5] to instruct:adam (port 8319)
 
 === [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===
+Unknown option: conda
+Usage: federated_parallel_sweep.sh [options]
+
+Options:
+  --rounds N            Number of federated rounds per experiment (default: 4)
+  --optimizers LIST     Comma separated optimizers (default: sgd,adam,muon)
+  --lr VALUE            Server-side learning rate (default: 1e-6)
+  --batch-size N        Client batch size (default: 2)
+  --base-port PORT      Starting TCP port for Flower server (default: 8300)
+  --host HOST           Host/IP for Flower server binding (default: 127.0.0.1)
+  --server-device DEV   Device flag for server process (default: auto)
+  --client-device DEV   Default device flag for client processes (default: auto)
+  --client-gpus LIST    Comma separated GPU ids (or cpu) assigned round-robin
+  --sample-count N      Cached sample count per client (default: 2048)
+  --block-size N        Token block size (default: 128)
+  --scope VALUE         Trainable scope passed to clients (default: full)
+  --dir-count N         Direction count for server-side ZO (default: 1)
+  --eval-steps N        Batches per evaluation round (default: 1)
+  --candidate-pool N    Instruct BP candidate pool size (default: 64)
+  --log-interval N      Client CSV logging interval (default: 10)
+  --weak-count N        Number of weak clients when mode=instruct (default: 8)
+  --auto-gpu            Enable dynamic GPU scheduling by free memory (default: off)
+  --min-free-gb N       Min free GB required to schedule a client (default: 5)
+  --min-free-gb-strong N Min free GB required for strong client scheduling (default: 12)
+  --gpu-poll-interval S Seconds between GPU free-mem checks (default: 2)
+  --gpu-poll-timeout S  Max seconds to wait for a suitable GPU (default: 600)
+  --modes LIST          Which modes to run: instruct,server_zo (default: both)
+  --gpu-lock-grace S    Seconds to hold per-GPU lock after launch (default: 3)
+  --gpu-start-jitter S  Random jitter [0,S] before/after launch (default: 0)
+  --help                Show this message and exit
+
+Environment overrides:
+  PYTHON_BIN            Python executable to invoke (default: python)
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      Starting Flower server, config: num_rounds=10000, no round_timeout
+Port in server address 0.0.0.0:8319 is already in use.
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      Starting Flower server, config: num_rounds=10000, no round_timeout
+[92mINFO [0m:      Flower ECE: gRPC server running (10000 rounds), SSL is disabled
+[92mINFO [0m:      [INIT]
+[92mINFO [0m:      Requesting initial parameters from one random client
+Client failure detected; terminating server.
+Experiment instruct:adam failed.
+1 experiment(s) failed.
+/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return torch.load(io.BytesIO(b))
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      
+[92mINFO [0m:      Received: get_parameters message f65652ca-cec4-4002-b092-9f03eb7e494c
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      Received initial parameters from one random client
+[92mINFO [0m:      Starting evaluation of initial global parameters
+[92mINFO [0m:      Evaluation returned no results (`None`)
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 1]
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+Traceback (most recent call last):
+  File "/data/pc/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/data/pc/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 960, in _next
+    _common.wait(self._state.condition.wait, _response_ready)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/grpc/_common.py", line 156, in wait
+    _wait_once(wait_fn, MAXIMUM_WAIT_TIMEOUT, spin_cb)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/grpc/_common.py", line 116, in _wait_once
+    wait_fn(timeout=timeout)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/threading.py", line 324, in wait
+    gotit = waiter.acquire(True, timeout)
+KeyboardInterrupt
+Traceback (most recent call last):
+  File "/data/pc/ZOPretrain/federated/server_flower.py", line 1087, in <module>
+    main()
+  File "/data/pc/ZOPretrain/federated/server_flower.py", line 1079, in main
+    fl.server.start_server(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/server/app.py", line 255, in start_server
+    hist = run_fl(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/server/server.py", line 492, in run_fl
+    hist, elapsed_time = server.fit(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/server/server.py", line 115, in fit
+    res_fit = self.fit_round(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/server/server.py", line 217, in fit_round
+    client_instructions = self.strategy.configure_fit(
+  File "/data/pc/ZOPretrain/federated/server_flower.py", line 174, in configure_fit
+    clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/server/client_manager.py", line 189, in sample
+    self.wait_for(min_num_clients)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/server/client_manager.py", line 134, in wait_for
+    return self._cv.wait_for(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/threading.py", line 355, in wait_for
+    self.wait(waittime)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/threading.py", line 324, in wait
+    gotit = waiter.acquire(True, timeout)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/common/exit_handlers.py", line 80, in graceful_exit_handler
+    flwr_exit(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/common/exit/exit.py", line 75, in flwr_exit
+    event(event_type, event_details).result()
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/concurrent/futures/_base.py", line 440, in result
+    self._condition.wait(timeout)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt
+Total experiments: 1
+Assigning GPUs [2,4,5] to instruct:adam (port 8319)
+
+=== [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===

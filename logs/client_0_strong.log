@@ -1,0 +1,149 @@
+nohup: ignoring input
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return torch.load(io.BytesIO(b))
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 213580de-6112-4e8d-8193-be59ce1e04ca
+[Instruct-R] Summary: avg_rank=15636084.0, avg_cos=0.910834, min_req=0.9000, tune=False total_time=0.1504s
+[Client 0][Round 1] phase=strong_only role=strong bp_loss=10.958706 grad_norm=21.930935
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 34fa58d3-2830-49e4-8168-49cfa1c2bcaf
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 49eb74c9-cb83-42b3-a00f-aa36d5c0db96
+[Instruct-R] Summary: avg_rank=8388608.0, avg_cos=0.936380, min_req=0.9000, tune=False total_time=0.1118s
+[Client 0][Round 2] phase=joint role=strong bp_loss=10.968385 grad_norm=4.714993
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 3d5039d7-84c9-40d8-9a38-db7ed6f437bb
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 633b4d60-a001-4a5c-8d41-3d77577adecd
+[Instruct-R] Summary: avg_rank=65536.0, avg_cos=0.913900, min_req=0.9000, tune=False total_time=0.0292s
+[Client 0][Round 3] phase=joint role=strong bp_loss=9.702848 grad_norm=2.021785
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 2ab39ac4-7e66-461e-8cf5-3165ad9cfddd
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 2032a6c1-5440-4c7f-8a51-ef7c3828107e
+[Instruct-R] Summary: avg_rank=262144.0, avg_cos=0.925817, min_req=0.9000, tune=False total_time=0.0495s
+[Client 0][Round 4] phase=joint role=strong bp_loss=9.235925 grad_norm=1.698823
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message d93ef8d9-8b1d-450b-855c-a5814866f270
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message d1c6f752-353f-492c-905e-dc3a810af6ae
+[Instruct-R] Summary: avg_rank=65536.0, avg_cos=0.920621, min_req=0.9000, tune=False total_time=0.0465s
+[Client 0][Round 5] phase=joint role=strong bp_loss=8.837508 grad_norm=1.603822
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 6693647f-eb44-462a-b0aa-0b8a421f857c
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 9f7cd624-7bcc-4a19-9f1e-34196c7ecd1b
+[Instruct-R] Summary: avg_rank=65536.0, avg_cos=0.902117, min_req=0.9000, tune=False total_time=0.0413s
+[Client 0][Round 6] phase=joint role=strong bp_loss=8.807905 grad_norm=1.479264
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 68d7a37e-0fb9-44e2-abcb-b3e2ca261340
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 1c01fab8-7400-4a03-87ad-5bef08559647
+[Instruct-R] Summary: avg_rank=32768.0, avg_cos=0.904587, min_req=0.9000, tune=False total_time=0.0414s
+[Client 0][Round 7] phase=joint role=strong bp_loss=8.653591 grad_norm=1.696163
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 5c9445e9-671f-4930-8977-07599765b99e
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 5e260150-cd2b-44a1-acfd-89f7a753d452
+[Instruct-R] Summary: avg_rank=128698.0, avg_cos=0.909227, min_req=0.9000, tune=False total_time=0.0232s
+[Client 0][Round 8] phase=joint role=strong bp_loss=8.579192 grad_norm=1.215228
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 887d08a0-df5e-4e82-b610-a6a7374898f5
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 28344dcb-da2f-47bd-9259-23650aaa0a6a
+[Instruct-R] Summary: avg_rank=8192.0, avg_cos=0.904409, min_req=0.9000, tune=False total_time=0.0394s
+[Client 0][Round 9] phase=joint role=strong bp_loss=8.476372 grad_norm=2.106050
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 03f3e2f6-6e84-4f33-afe6-1fa34927f873
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 8ef4c7db-9121-4aa0-8955-47c0ded9ecc0
+[Instruct-R] Summary: avg_rank=2048.0, avg_cos=0.901781, min_req=0.9000, tune=False total_time=0.0406s
+[Client 0][Round 10] phase=joint role=strong bp_loss=8.458493 grad_norm=2.348375
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message e8266398-59b9-4b30-b676-3a42ecf41803
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 39a2cc9a-e991-4859-9f89-0124d33a6d02
+[Instruct-R] Summary: avg_rank=131072.0, avg_cos=0.903328, min_req=0.9000, tune=False total_time=0.0398s
+[Client 0][Round 11] phase=joint role=strong bp_loss=8.776105 grad_norm=1.212712
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message e6923142-0901-47d7-8d46-41d0b5dcce15
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 9c44b652-623e-40e8-982d-f10edaaf0d05
+[Instruct-R] Summary: avg_rank=125893.0, avg_cos=0.906023, min_req=0.9000, tune=False total_time=0.0443s
+[Client 0][Round 12] phase=joint role=strong bp_loss=8.625321 grad_norm=1.383443
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message c6512e82-4ec4-464e-b57f-296e2cf4bc8f
+[92mINFO [0m:      Sent reply
+Traceback (most recent call last):
+  File "/data/pc/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/data/pc/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/data/pc/.conda/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 969, in _next
+    raise self
+grpc._channel._MultiThreadedRendezvous: <_MultiThreadedRendezvous of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "Socket closed"
+	debug_error_string = "UNKNOWN:Error received from peer ipv4:127.0.0.1:9999 {created_time:"2025-11-16T12:51:00.27525081+08:00", grpc_status:14, grpc_message:"Socket closed"}"
+>

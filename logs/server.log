@@ -1,0 +1,111 @@
+nohup: ignoring input
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.server.start_server() is deprecated.
+	Instead, use the `flower-superlink` CLI command to start a SuperLink as shown below:
+
+		$ flower-superlink --insecure
+
+	To view usage and all available options, run:
+
+		$ flower-superlink --help
+
+	Using `start_server()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      Starting Flower server, config: num_rounds=10000, no round_timeout
+[92mINFO [0m:      Flower ECE: gRPC server running (10000 rounds), SSL is disabled
+[92mINFO [0m:      [INIT]
+[92mINFO [0m:      Requesting initial parameters from one random client
+[92mINFO [0m:      Received initial parameters from one random client
+[92mINFO [0m:      Starting evaluation of initial global parameters
+[92mINFO [0m:      Evaluation returned no results (`None`)
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 1]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 1] phase=strong_only strong=1 weak=0 avg_c->s=943266716.3B avg_s->c=256.0B up_param=0B down_param=0B tokens=1024 ||g_strong||=2.193e+01 ||g_weak||=0.000e+00 ||g_final||=2.193e+01
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[93mWARNING [0m:   No evaluate_metrics_aggregation_fn provided
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 2]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 2] phase=joint strong=1 weak=0 avg_c->s=1137659260.0B avg_s->c=256.0B up_param=0B down_param=581268B tokens=1024 ||g_strong||=4.715e+00 ||g_weak||=0.000e+00 ||g_final||=4.715e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 3]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 3] phase=joint strong=1 weak=0 avg_c->s=1115392417.0B avg_s->c=256.0B up_param=0B down_param=578835B tokens=1024 ||g_strong||=2.022e+00 ||g_weak||=0.000e+00 ||g_final||=2.022e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 4]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 4] phase=joint strong=1 weak=0 avg_c->s=1115920224.0B avg_s->c=256.0B up_param=0B down_param=561920B tokens=1024 ||g_strong||=1.699e+00 ||g_weak||=0.000e+00 ||g_final||=1.699e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 5]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 5] phase=joint strong=1 weak=0 avg_c->s=1115392444.0B avg_s->c=256.0B up_param=0B down_param=562636B tokens=1024 ||g_strong||=1.604e+00 ||g_weak||=0.000e+00 ||g_final||=1.604e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 6]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 6] phase=joint strong=1 weak=0 avg_c->s=1115392513.0B avg_s->c=256.0B up_param=0B down_param=561661B tokens=1024 ||g_strong||=1.479e+00 ||g_weak||=0.000e+00 ||g_final||=1.479e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 7]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 7] phase=joint strong=1 weak=0 avg_c->s=1115304920.0B avg_s->c=256.0B up_param=0B down_param=561780B tokens=1024 ||g_strong||=1.696e+00 ||g_weak||=0.000e+00 ||g_final||=1.696e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 8]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 8] phase=joint strong=1 weak=0 avg_c->s=1115561010.0B avg_s->c=256.0B up_param=0B down_param=561816B tokens=1024 ||g_strong||=1.215e+00 ||g_weak||=0.000e+00 ||g_final||=1.215e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 9]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 9] phase=joint strong=1 weak=0 avg_c->s=1115238441.0B avg_s->c=256.0B up_param=0B down_param=561915B tokens=1024 ||g_strong||=2.106e+00 ||g_weak||=0.000e+00 ||g_final||=2.106e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 10]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 10] phase=joint strong=1 weak=0 avg_c->s=1115222005.0B avg_s->c=256.0B up_param=0B down_param=561928B tokens=1024 ||g_strong||=2.348e+00 ||g_weak||=0.000e+00 ||g_final||=2.348e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 11]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 11] phase=joint strong=1 weak=0 avg_c->s=1115567442.0B avg_s->c=256.0B up_param=0B down_param=561892B tokens=1024 ||g_strong||=1.213e+00 ||g_weak||=0.000e+00 ||g_final||=1.213e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 3 results and 0 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 12]
+[92mINFO [0m:      configure_fit: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_fit: received 3 results and 0 failures
+[Instruct][Round 12] phase=joint strong=1 weak=0 avg_c->s=1115553651.0B avg_s->c=256.0B up_param=0B down_param=562021B tokens=1024 ||g_strong||=1.383e+00 ||g_weak||=0.000e+00 ||g_final||=1.383e+00
+[92mINFO [0m:      configure_evaluate: strategy sampled 3 clients (out of 3)
+[92mINFO [0m:      aggregate_evaluate: received 2 results and 1 failures
+[92mINFO [0m:      
+[92mINFO [0m:      [ROUND 13]
+[92mINFO [0m:      Sampling failed: number of available clients (1) is less than number of requested clients (3).
+[92mINFO [0m:      configure_fit: no clients selected, cancel

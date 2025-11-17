@@ -33,7 +33,7 @@
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "6",
+        "CUDA_VISIBLE_DEVICES": "0",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
@@ -73,7 +73,7 @@
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "6",
+        "CUDA_VISIBLE_DEVICES": "0",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",

@@ -12,13 +12,23 @@ import torch
 import flwr as fl
 from flwr.common import parameters_to_ndarrays, ndarrays_to_parameters
 import base64
+from torch.nn import CrossEntropyLoss
+from transformers import AutoTokenizer
 
 # 将项目根目录加入 sys.path，方便导入根目录下的模块（例如 optim_muon）
 PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from bp_instruct import generate_instruct_directions_with_R
 from federated.sparse_codec import decode_shared_sparse_dirs_to_numpy, encode_shared_sparse_dirs_from_flats
+from federated.data_utils import load_or_build_examples
+from reproduce_zo_paper import create_model
+
+# 默认缓存目录（与客户端保持一致），避免重复下载
+os.environ.setdefault("HF_HOME", "/data/pc/ZOPretrain/cache")
+os.environ.setdefault("TRANSFORMERS_CACHE", "/data/pc/ZOPretrain/cache/hf")
+os.environ.setdefault("HF_DATASETS_CACHE", "/data/pc/ZOPretrain/cache/hf")
 
 def resolve_runtime_device(device_pref: str) -> Tuple[str, torch.device, str]:
     prefers_cuda = device_pref != "cpu"
@@ -60,6 +70,12 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         muon_hidden_size: int = 768,
         eval_steps: int = 1,
         server_csv_path: Optional[str] = None,
+        # 服务器端评估配置（在参数更新后对一个小评估集计算真实 loss）
+        server_eval_enable: bool = True,
+        server_eval_batch_size: int = 8,
+        server_eval_block_size: int = 128,
+        server_eval_sample_count: int = 4096,
+        server_eval_cache_dir: str = "cache",
     ) -> None:
         super().__init__(
             fraction_fit=fraction_fit,
@@ -86,6 +102,20 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         self.muon_orthogonal_init = bool(muon_orthogonal_init)
         self.muon_hidden_size = int(muon_hidden_size)
         self.eval_steps = int(eval_steps)
+        # Instruct 方向相似度目标（server 也用同一目标生成方向）
+        self.instruct_cosine_target: float = 0.9
+        # 为 weak 客户端注入的“微小能量噪声”占比（相对方向能量），如 0.01 表示 1%
+        self.instruct_noise_energy_ratio: float = 0.01
+        # server-side eval
+        self.server_eval_enable = bool(server_eval_enable)
+        self.server_eval_batch_size = int(server_eval_batch_size)
+        self.server_eval_block_size = int(server_eval_block_size)
+        self.server_eval_sample_count = int(server_eval_sample_count)
+        self.server_eval_cache_dir = str(server_eval_cache_dir)
+        self._eval_tokenizer = None
+        self._eval_model = None
+        self._eval_loss_fn = None
+        self._eval_examples = None
         # state
         # 缓存上一轮 strong 客户端提供的近似方向（供下一轮 weak 客户端使用）
         self._available_dir_blob_json: Optional[str] = None
@@ -102,7 +132,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         # 下行更新（server->client）缓存：发送稀疏更新（含seed噪声），避免每轮下发全量参数
         self._server_update_sparse_json: Optional[str] = None
         # 简单稀疏率（按维度的比例选 Top-k），0.001 表示取 0.1% 最高幅值分量
-        self._downlink_topk_ratio: float = 1e-3
+        self._downlink_topk_ratio: float = 1
         # 本轮下行参数字节统计（在 configure_fit 中设置，aggregate_fit 中读取写入）
         self._downlink_param_bytes_last: int = 0
         self._csv_fieldnames = [
@@ -169,10 +199,84 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 self._downlink_param_bytes_last = 0
         else:
             self._downlink_param_bytes_last = 0
-        fit_ins = fl.common.FitIns(fl.common.ndarrays_to_parameters([]), cfg)
         sample_size, min_num_clients = self.num_fit_clients(client_manager.num_available())
         clients = client_manager.sample(num_clients=sample_size, min_num_clients=min_num_clients)
-        return [(client, fit_ins) for client in clients]
+        fit_list: List[Tuple[fl.server.client_proxy.ClientProxy, fl.common.FitIns]] = []
+        for c in clients:
+            cfg_one = dict(cfg)
+            # 为每个客户端分配不同的噪声 seed
+            try:
+                cid_int = int("".join(ch for ch in str(c.cid) if ch.isdigit()) or "0")
+            except Exception:
+                cid_int = 0
+            cfg_one["instruct_noise_seed"] = int(((rnd * 1000003) ^ (cid_int * 911)) & 0x7fffffff)
+            fit_ins = fl.common.FitIns(fl.common.ndarrays_to_parameters([]), cfg_one)
+            fit_list.append((c, fit_ins))
+        return fit_list
+
+    def _ensure_eval_ready(self) -> None:
+        if not self.server_eval_enable:
+            return
+        if self._eval_tokenizer is None:
+            self._eval_tokenizer = AutoTokenizer.from_pretrained(
+                "gpt2",
+                cache_dir=os.environ.get("TRANSFORMERS_CACHE", "/data/pc/ZOPretrain/cache/hf"),
+                local_files_only=os.environ.get("TRANSFORMERS_OFFLINE", "") == "1",
+            )
+            if self._eval_tokenizer.pad_token is None:
+                self._eval_tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        if self._eval_model is None:
+            self._eval_model = create_model(len(self._eval_tokenizer)).to(self._torch_device)
+            self._eval_model.eval()
+        if self._eval_loss_fn is None:
+            self._eval_loss_fn = CrossEntropyLoss()
+        if self._eval_examples is None:
+            self._eval_examples = load_or_build_examples(
+                self._eval_tokenizer,
+                block_size=self.server_eval_block_size,
+                cache_dir=self.server_eval_cache_dir,
+                sample_count=self.server_eval_sample_count,
+            )
+
+    @torch.no_grad()
+    def _server_eval_loss(self, updated_weights: List[torch.Tensor], eval_steps: int) -> Optional[float]:
+        if not self.server_eval_enable:
+            return None
+        try:
+            self._ensure_eval_ready()
+            assert self._eval_model is not None and self._eval_loss_fn is not None and self._eval_examples is not None
+            # 将更新后的权重加载到评估模型
+            model_params = list(self._eval_model.parameters())
+            if len(model_params) != len(updated_weights):
+                return None
+            for p, w in zip(model_params, updated_weights):
+                if tuple(p.data.shape) != tuple(w.shape):
+                    return None
+                p.data.copy_(w.to(p.device, dtype=p.data.dtype))
+            # 评估若干步
+            steps = 0
+            total = torch.zeros(1, device=self._torch_device, dtype=torch.float64)
+            bs = max(1, int(self.server_eval_batch_size))
+            for i in range(0, min(len(self._eval_examples), bs * max(1, int(eval_steps))), bs):
+                batch = self._eval_examples[i:i+bs]
+                if not batch:
+                    break
+                inputs = torch.stack(batch, dim=0).to(self._torch_device)
+                labels = inputs.clone()
+                logits = self._eval_model(inputs).logits
+                shift_logits = logits[:, :-1, :].contiguous()
+                shift_labels = labels[:, 1:].contiguous()
+                loss = self._eval_loss_fn(
+                    shift_logits.view(-1, shift_logits.size(-1)),
+                    shift_labels.view(-1),
+                )
+                total.add_(loss.detach().to(device=total.device, dtype=total.dtype))
+                steps += 1
+                if steps >= max(1, int(eval_steps)):
+                    break
+            return float((total / max(steps, 1)).item())
+        except Exception:
+            return None
 
     def _write_csv_row(self, data: Dict[str, Any]) -> None:
         if not self._csv_path:
@@ -217,12 +321,12 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         cfg["bp_candidate_seeds_json"] = json.dumps(self._make_seeds_pool(rnd))
         cfg["bp_select_topk"] = int(self.topk)
         cfg["instruct_dir_count"] = int(self.dir_count)
-        cfg["instruct_cosine_target"] = 0.9
+        cfg["instruct_cosine_target"] = float(self.instruct_cosine_target)
         cfg["instruct_dir_method"] = "r"
-        # 兼容字段：下发 weak 方向数量 n_weak 与扰动强度（供客户端添加噪声）
+        # 兼容字段：下发 weak 方向数量与“微小能量噪声”参数（客户端据此重建噪声）
         cfg["n_weak"] = int(self.dir_count)
-        cfg["instruct_noise_scale"] = 0.1
-        cfg["instruct_noise_policy"] = "zero"
+        cfg["instruct_noise_energy_ratio"] = float(self.instruct_noise_energy_ratio)
+        cfg["instruct_noise_policy"] = "orth"
         cfg["instruct_sparse_enable"] = True
 
         # 每轮开始前清空 pending，待本轮 strong 回传后再更新
@@ -365,6 +469,8 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         strong_total_weight: float = 0.0
         strong_count = 0
         strong_grad_norm = 0.0
+        # 收集每个 strong 客户端的展平梯度向量，用于服务端生成指令方向
+        strong_flat_list: List[torch.Tensor] = []
 
         # 统计 weak 方向导数
         weak_use_dirs = len(self._weak_dirs_in_use) > 0
@@ -407,6 +513,12 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                             for g in per_grad_list:
                                 grad_norm_sq += torch.sum(g.to(dtype=torch.float64) * g.to(dtype=torch.float64))
                             strong_grad_norm = float(torch.sqrt(grad_norm_sq.clamp_min(0.0)).item())
+                        # 展平保存（用于后续生成多样方向）
+                        try:
+                            flat = torch.cat([g.view(-1) for g in per_grad_list]).to(device=torch_device, dtype=torch.float32)
+                            strong_flat_list.append(flat)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
@@ -414,20 +526,9 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             # 优先处理稀疏 JSON（带共享支撑与seed噪声），必要时再回退到密集 JSON
             sparse_json = metrics.get("instruct_dir_sparse_json")
             if sparse_json and self._pending_dir_blob_json is None:
-                try:
-                    restored = decode_shared_sparse_dirs_to_numpy(
-                        str(sparse_json),
-                        apply_noise=True,
-                        device=self._torch_device,
-                    )
-                    if restored:
-                        self._pending_dir_blob_json = None  # 稀疏路径不直接保存密集JSON
-                        # 仅保存解码后的方向数组，后续下发时再临时序列化
-                        self._pending_dirs = restored[: self.dir_count]
-                except Exception:
-                    # 如果稀疏解码失败，回退到密集JSON路径
-                    self._pending_dir_blob_json = None
-                    self._pending_dirs = []
+                # 简化：不再处理客户端稀疏方向，上由服务端从 strong 梯度生成
+                self._pending_dir_blob_json = None
+                self._pending_dirs = []
             if dir_blob_json and self._pending_dir_blob_json is None:
                 try:
                     blob = json.loads(dir_blob_json)
@@ -518,7 +619,12 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
                 "downlink_param_bytes_total": int(self._downlink_param_bytes_last),
                 "tokens_total": int(tokens_total),
             }
-            return ndarrays_to_parameters(nds), metrics
+            # 返回当前全局参数：优先使用服务器持久参数；否则从当前权重张量导出
+            if self._params is not None:
+                nds_now = [p.data.detach().to("cpu").numpy() for p in self._params]
+            else:
+                nds_now = [w.detach().to("cpu").numpy() for w in w_tensors]
+            return ndarrays_to_parameters(nds_now), metrics
 
         # 计算 weak 方向对应的梯度平均
         weak_grad_avg: List[torch.Tensor] = [
@@ -608,12 +714,56 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
             new_nds = [p.data.detach().to("cpu").numpy() for p in self._params]
 
         # 更新供下一轮使用的方向
-        if self._pending_dir_blob_json and self._pending_dirs:
-            self._available_dir_blob_json = self._pending_dir_blob_json
+        # 优先：使用服务端根据 strong 梯度用“R 方法”生成方向；若无，则使用 pending（来自客户端密集方向）
+        server_generated_dirs: List[List[np.ndarray]] = []
+        try:
+            # 聚合 strong 平均梯度（逐参数）
+            if strong_total_weight > 0.0:
+                strong_avg_grads = [ (g_sum / strong_total_weight).to(device=torch_device, dtype=torch.float32) for g_sum in strong_grad_sums ]
+            else:
+                strong_avg_grads = []
+            # 若 strong 不可用，则可回退到最终梯度估计
+            if not strong_avg_grads:
+                strong_avg_grads = [g.detach().clone().to(device=torch_device, dtype=torch.float32) for g in final_grad_tensors]
+            # 计算范数
+            flat = torch.cat([t.view(-1) for t in strong_avg_grads]).to(device=torch_device, dtype=torch.float32)
+            total_norm_sq_val = float(torch.sum(flat * flat).item())
+            total_norm_val = float(torch.sqrt(torch.tensor(total_norm_sq_val, device=torch_device, dtype=torch.float32)).item())
+            if total_norm_val > 0.0 and self.dir_count > 0:
+                seed_val = int((rnd * 1000003) ^ 0x51F15EED) & 0x7fffffff
+                dir_iter = generate_instruct_directions_with_R(
+                    strong_avg_grads,
+                    self.dir_count,
+                    self.instruct_cosine_target,
+                    total_norm_val,
+                    total_norm_sq=total_norm_sq_val,
+                    device=torch_device,
+                    min_cos_floor=None,
+                    seed=seed_val,
+                    max_rank=None,
+                    tune_to_target=True,
+                    use_float32=True,
+                )
+                if dir_iter is not None:
+                    for dirs in dir_iter:
+                        per_param_np: List[np.ndarray] = []
+                        for d in dirs:
+                            per_param_np.append(d.detach().to("cpu", dtype=torch.float32).numpy())
+                        server_generated_dirs.append(per_param_np)
+        except Exception:
+            server_generated_dirs = []
+
+        if server_generated_dirs:
+            self._available_dirs = server_generated_dirs
+            self._available_dir_blob_json = None  # 需要时在下发时临时序列化
+            self._pending_dirs = []
+            self._pending_dir_blob_json = None
+        elif self._pending_dirs:
             self._available_dirs = self._pending_dirs[: self.dir_count]
+            self._available_dir_blob_json = self._pending_dir_blob_json  # 可能为 None，后续按需再临时序列化
         else:
-            self._available_dir_blob_json = None
             self._available_dirs = []
+            self._available_dir_blob_json = None
         self._weak_dirs_in_use = []
         self._weak_seed_list_in_use = []
 
@@ -684,12 +834,25 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         if weak_loss_mean is not None:
             metrics["weak_baseline_loss"] = float(weak_loss_mean)
 
-        # 定义“loss”列：优先 weak_baseline_loss，其次 strong_bp_loss，否则空
-        loss_value = None
-        if weak_loss_mean is not None:
-            loss_value = float(weak_loss_mean)
-        elif strong_loss_mean is not None:
-            loss_value = float(strong_loss_mean)
+        # 服务器端真实评估：在参数更新后于一个小评估集上计算 loss
+        server_eval_loss: Optional[float] = None
+        if self.server_eval_enable:
+            if self.optimizer_name == "sgd":
+                updated_w_for_eval = [t.detach().clone().to(self._torch_device, dtype=torch.float32) for t in new_w_tensors]
+            else:
+                assert self._params is not None
+                updated_w_for_eval = [p.data.detach().clone().to(self._torch_device, dtype=torch.float32) for p in self._params]
+            server_eval_loss = self._server_eval_loss(updated_w_for_eval, self.eval_steps)
+            if server_eval_loss is not None:
+                metrics["server_eval_loss"] = float(server_eval_loss)
+
+        # 定义“loss”列：优先使用 server_eval_loss；否则回退到 weak/strong 的客户端上报均值
+        loss_value = server_eval_loss
+        if loss_value is None:
+            if weak_loss_mean is not None:
+                loss_value = float(weak_loss_mean)
+            elif strong_loss_mean is not None:
+                loss_value = float(strong_loss_mean)
 
         csv_row: Dict[str, Any] = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
