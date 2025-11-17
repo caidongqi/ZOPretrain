@@ -20,9 +20,9 @@ import flwr as fl
 import os
 
 # 固定本地缓存目录
-os.environ.setdefault("HF_HOME", "/data/pc/ZOPretrain/cache")
-os.environ.setdefault("TRANSFORMERS_CACHE", "/data/pc/ZOPretrain/cache/hf")
-os.environ.setdefault("HF_DATASETS_CACHE", "/data/pc/ZOPretrain/cache/hf")
+os.environ.setdefault("HF_HOME", "cache")
+os.environ.setdefault("TRANSFORMERS_CACHE", "cache/hf")
+os.environ.setdefault("HF_DATASETS_CACHE", "cache/hf")
 # 若完全离线，打开这一行（确保缓存已存在）
 # os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 # 将项目根目录加入 sys.path，便于从 federated/ 下导入根目录模块
@@ -143,7 +143,7 @@ class ZOFLClient(fl.client.NumPyClient):
         # Tokenizer & Model
         self.tokenizer = AutoTokenizer.from_pretrained(
             "gpt2",
-            cache_dir=os.environ.get("TRANSFORMERS_CACHE", "/data/pc/ZOPretrain/cache/hf"),
+            cache_dir=os.environ.get("TRANSFORMERS_CACHE", "cache/hf"),
             # 离线时设 True；首次需联网下载就设 False
             local_files_only=os.environ.get("TRANSFORMERS_OFFLINE", "") == "1",
         )

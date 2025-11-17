@@ -292,3 +292,462 @@ Total experiments: 1
 Assigning GPUs [2,4,5] to instruct:adam (port 8319)
 
 === [1/1] Running instruct mode with adam optimizer on 127.0.0.1:8319 ===
+python: can't open file '/data/pc/ZOPretrain/federated/client_flower.py': [Errno 2] No such file or directory
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/pc/ZOPretrain/cache'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/pc/ZOPretrain'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/pc'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 997, in main
+    client = ZOFLClient(
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 199, in __init__
+    self.trainloader: DataLoader = build_client_dataloader(
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/data_utils.py", line 76, in build_client_dataloader
+    examples = load_or_build_examples(tokenizer, block_size=block_size, cache_dir=cache_dir, sample_count=sample_count)
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/data_utils.py", line 23, in load_or_build_examples
+    cache_file = _cache_file_path(cache_dir, block_size, sample_count)
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/data_utils.py", line 14, in _cache_file_path
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1179, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1179, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1179, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+OSError: [Errno 30] Read-only file system: '/data'
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/pc/ZOPretrain/cache'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/pc/ZOPretrain'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/data/pc'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 997, in main
+    client = ZOFLClient(
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 199, in __init__
+    self.trainloader: DataLoader = build_client_dataloader(
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/data_utils.py", line 76, in build_client_dataloader
+    examples = load_or_build_examples(tokenizer, block_size=block_size, cache_dir=cache_dir, sample_count=sample_count)
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/data_utils.py", line 23, in load_or_build_examples
+    cache_file = _cache_file_path(cache_dir, block_size, sample_count)
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/data_utils.py", line 14, in _cache_file_path
+    cache_dir_path.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1179, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1179, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1179, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/pathlib.py", line 1175, in mkdir
+    self._accessor.mkdir(self, mode)
+OSError: [Errno 30] Read-only file system: '/data'
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+Reading dataset: 0it [00:00, ?it/s]Reading dataset: 1it [00:01,  1.53s/it]Token indices sequence length is longer than the specified maximum sequence length for this model (1594 > 1024). Running this sequence through the model will result in indexing errors
+Reading dataset: 69it [00:01, 58.52it/s]Reading dataset: 162it [00:01, 152.96it/s]Reading dataset: 251it [00:01, 251.69it/s]Reading dataset: 346it [00:01, 362.93it/s]Reading dataset: 438it [00:02, 466.10it/s]Reading dataset: 531it [00:02, 562.23it/s]Reading dataset: 620it [00:02, 636.86it/s]Reading dataset: 721it [00:02, 728.61it/s]Reading dataset: 817it [00:02, 787.21it/s]Reading dataset: 910it [00:02, 812.91it/s]Reading dataset: 1002it [00:03, 228.79it/s]Reading dataset: 1072it [00:03, 274.08it/s]Reading dataset: 1164it [00:03, 351.96it/s]Reading dataset: 1257it [00:03, 437.00it/s]Reading dataset: 1347it [00:04, 517.52it/s]Reading dataset: 1440it [00:04, 599.51it/s]Reading dataset: 1535it [00:04, 675.69it/s]Reading dataset: 1634it [00:04, 748.04it/s]Reading dataset: 1726it [00:04, 785.81it/s]Reading dataset: 1817it [00:04, 809.60it/s]Reading dataset: 1908it [00:04, 836.14it/s]Reading dataset: 1998it [00:04, 842.92it/s]Reading dataset: 2048it [00:04, 426.38it/s]
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...
+To disable this warning, you can either:
+	- Avoid using `tokenizers` before the fork if possible
+	- Explicitly set the environment variable TOKENIZERS_PARALLELISM=(true | false)
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 969, in _next
+    raise self
+grpc._channel._MultiThreadedRendezvous: <_MultiThreadedRendezvous of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:8319: Failed to connect to remote host: connect: Connection refused (61)"
+	debug_error_string = "UNKNOWN:Error received from peer  {created_time:"2025-11-14T22:03:05.321742+08:00", grpc_status:14, grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:8319: Failed to connect to remote host: connect: Connection refused (61)"}"
+>
+/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return torch.load(io.BytesIO(b))
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 969, in _next
+    raise self
+grpc._channel._MultiThreadedRendezvous: <_MultiThreadedRendezvous of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:8319: Failed to connect to remote host: connect: Connection refused (61)"
+	debug_error_string = "UNKNOWN:Error received from peer  {grpc_message:"failed to connect to all addresses; last error: UNKNOWN: ipv4:127.0.0.1:8319: Failed to connect to remote host: connect: Connection refused (61)", grpc_status:14, created_time:"2025-11-14T22:11:41.018004+08:00"}"
+>
+/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return torch.load(io.BytesIO(b))
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message c29a9bb9-0f5b-40b4-8f23-33444698a608
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+[Client 1][Round 1] phase=strong_only role=weak skip
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 2915165e-94d4-436e-b4f5-66cf92531a66
+[92mINFO [0m:      Sent reply
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 960, in _next
+    _common.wait(self._state.condition.wait, _response_ready)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_common.py", line 156, in wait
+    _wait_once(wait_fn, MAXIMUM_WAIT_TIMEOUT, spin_cb)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_common.py", line 116, in _wait_once
+    wait_fn(timeout=timeout)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/threading.py", line 324, in wait
+    gotit = waiter.acquire(True, timeout)
+KeyboardInterrupt
+/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return torch.load(io.BytesIO(b))
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      
+[92mINFO [0m:      Received: get_parameters message 9e5b1630-c4d7-45d2-bd3c-d016f909a117
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 334746b0-22d5-4af0-a8b5-351f6a6dbca5
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+[Client 1][Round 1] phase=strong_only role=weak skip
+[92mINFO [0m:      Sent reply
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 969, in _next
+    raise self
+grpc._channel._MultiThreadedRendezvous: <_MultiThreadedRendezvous of RPC that terminated with:
+	status = StatusCode.UNAVAILABLE
+	details = "Socket closed"
+	debug_error_string = "UNKNOWN:Error received from peer ipv4:127.0.0.1:8319 {created_time:"2025-11-14T22:26:22.770289+08:00", grpc_status:14, grpc_message:"Socket closed"}"
+>
+/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/torch/storage.py:414: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return torch.load(io.BytesIO(b))
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_numpy_client() is deprecated. 
+	Instead, use `flwr.client.start_client()` by ensuring you first call the `.to_client()` method as shown below: 
+	flwr.client.start_client(
+		server_address='<IP>:<PORT>',
+		client=FlowerClient().to_client(), # <-- where FlowerClient is of type flwr.client.NumPyClient object
+	)
+	Using `start_numpy_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[93mWARNING [0m:   DEPRECATED FEATURE: flwr.client.start_client() is deprecated.
+	Instead, use the `flower-supernode` CLI command to start a SuperNode as shown below:
+
+		$ flower-supernode --insecure --superlink='<IP>:<PORT>'
+
+	To view all available options, run:
+
+		$ flower-supernode --help
+
+	Using `start_client()` is deprecated.
+
+            This is a deprecated feature. It will be removed
+            entirely in future versions of Flower.
+        
+[92mINFO [0m:      
+[92mINFO [0m:      Received: get_parameters message a80e6297-cc68-412f-a80b-de137ee72e21
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 6b311e59-1fb9-42b4-ab39-496404691e61
+Initializing a small GPT-2 model (~20M parameters)...
+Model created. Total parameters: 209.10M
+Training scope: full model.
+[Client 1][Round 1] phase=strong_only role=weak skip
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message c91c5fdf-a6a3-4c83-9e78-6be6b3cc7a46
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 84dcbdf4-8c5b-4e09-bd4d-f6ccca2759d9
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 118c9c93-7ba5-47ce-8f41-3409a5d81cb9
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 6b5bbee4-d195-43d9-ba1a-5ff5c7a86c8f
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 64d6a9eb-15c5-4089-a658-2ecaa2796765
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message fca12046-fd0e-4b07-b81b-df992969837a
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 07e3d281-066d-447e-be02-0e85f2108cc0
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 55bcb101-c899-422f-b6a9-42526d154110
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 3c153511-de1d-4713-91a4-19e91e0a03d4
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 2dd8d8dd-5ba6-4d51-802b-8a6c3584833a
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message ed173774-6555-42de-80b0-90fba31dfd54
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 0d9c6a8e-c715-40e8-9bd6-6adb18386a5a
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 5e19d0f7-cc01-4e7d-8356-bec6a11f32c4
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message d9fe1261-11a0-4eca-bb97-8e3817d6efc3
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 4c469698-9380-43c4-8614-b8e2233ebc71
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message eab2a5fb-7551-4b3f-aa09-9e63bc35f5a9
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message de79612f-b9eb-4ebd-bf2e-be36df37251f
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 52056434-4245-4e45-bdde-fa03b35927d0
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message fc072ba0-fc46-4d84-af61-bb8437b9e601
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message 0f92880a-2887-481a-a356-200f72f43201
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 19725a93-c21a-4fef-a3da-93aa3cddc91f
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: train message d612e28b-ea43-4540-805e-59f9825f3170
+[92mINFO [0m:      Sent reply
+[92mINFO [0m:      
+[92mINFO [0m:      Received: evaluate message 54eedd7c-3822-4ca4-b7fe-8a6bad171c11
+[92mINFO [0m:      Sent reply
+Traceback (most recent call last):
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1027, in <module>
+    main()
+  File "/Users/ppppp/master/前向传播/ZOPretrain/federated/client_flower.py", line 1023, in main
+    fl.client.start_numpy_client(server_address=args.server, client=client)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 731, in start_numpy_client
+    start_client(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 201, in start_client
+    start_client_internal(
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/app.py", line 438, in start_client_internal
+    message = receive()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/flwr/client/grpc_client/connection.py", line 142, in receive
+    proto = next(server_message_iterator)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 543, in __next__
+    return self._next()
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_channel.py", line 960, in _next
+    _common.wait(self._state.condition.wait, _response_ready)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_common.py", line 156, in wait
+    _wait_once(wait_fn, MAXIMUM_WAIT_TIMEOUT, spin_cb)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/site-packages/grpc/_common.py", line 116, in _wait_once
+    wait_fn(timeout=timeout)
+  File "/opt/anaconda3/envs/flwr/lib/python3.10/threading.py", line 324, in wait
+    gotit = waiter.acquire(True, timeout)
+KeyboardInterrupt
