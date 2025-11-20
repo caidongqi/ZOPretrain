@@ -374,6 +374,7 @@ class ZOFLClient(fl.client.NumPyClient):
                 bp_labels,
             )
             # Instruct 模式：仅统计 BP 使用的一批 token
+            p1 = bp_grads
             try:
                 tokens_this_round += count_tokens(bp_inputs)
             except Exception:
@@ -435,9 +436,9 @@ class ZOFLClient(fl.client.NumPyClient):
                     low_energy_mask[high_energy_indices] = False
                     num_low_energy_dims = int(low_energy_mask.sum().item())
 
-                # 简化：strong 客户端不再生成方向（包括 R 方法），统一由 server 端根据梯度构造
-                shapes = [list(p.data.shape) for p in self.trainable_params]
-
+            #     # 简化：strong 客户端不再生成方向（包括 R 方法），统一由 server 端根据梯度构造
+            shapes = [list(p.data.shape) for p in self.trainable_params]
+            p2 = bp_grads
             # 序列化 BP 梯度向量
             grad_payload: Dict[str, Any] = {
                 "dtype": "float32",
@@ -533,7 +534,16 @@ class ZOFLClient(fl.client.NumPyClient):
             eval_steps = int(config.get('zo_eval_steps', 1))
             provided_dirs: List[List[torch.Tensor]] = []
 
-            def _compute_loss_current() -> Tuple[float, int, int]:
+            # 预先采样一组用于 ZO 评估的 batch，保证 lp / lm / baseline 使用完全相同的数据
+            zo_eval_batches: List[torch.Tensor] = []
+            for batch in self.trainloader:
+                zo_eval_batches.append(batch)
+                if len(zo_eval_batches) >= eval_steps:
+                    break
+
+            def _compute_loss_current(
+                batches_override: Optional[List[torch.Tensor]] = None,
+            ) -> Tuple[float, int, int]:
                 was_training = self.model.training
                 if was_training:
                     self.model.eval()
@@ -542,7 +552,14 @@ class ZOFLClient(fl.client.NumPyClient):
                 tokens_used = 0
                 try:
                     with torch.no_grad():
-                        for batch in self.trainloader:
+                        # 若提供了固定的 batch 列表，则在这些 batch 上评估，
+                        # 否则回退到 DataLoader（行为与原逻辑兼容）
+                        data_iter = (
+                            batches_override
+                            if batches_override is not None and len(batches_override) > 0
+                            else self.trainloader
+                        )
+                        for batch in data_iter:
                             inputs = batch.to(self.device)
                             labels = inputs.clone()
                             tokens_used += count_tokens(inputs)
@@ -606,16 +623,16 @@ class ZOFLClient(fl.client.NumPyClient):
                             for u in dirs:
                                 z = torch.randn(u.shape, generator=gen, device=u.device, dtype=u.dtype) if gen is not None else torch.randn_like(u)
                                 noise_list.append(z)
-                            if noise_policy == 'orth':
-                                # 去除与方向的投影
-                                dot_num = torch.zeros(1, device=compute_device, dtype=torch.float64)
-                                for z, u in zip(noise_list, dirs):
-                                    zz = z.to(dot_num.device, dtype=torch.float64)
-                                    uu = u.to(dot_num.device, dtype=torch.float64)
-                                    dot_num = dot_num + torch.sum(zz * uu)
-                                coeff = float(dot_num.item()) / (dir_norm * dir_norm + eps_den)
-                                for i in range(len(noise_list)):
-                                    noise_list[i] = noise_list[i] - coeff * dirs[i]
+                            # if noise_policy == 'orth':
+                            #     # 去除与方向的投影
+                            #     dot_num = torch.zeros(1, device=compute_device, dtype=torch.float64)
+                            #     for z, u in zip(noise_list, dirs):
+                            #         zz = z.to(dot_num.device, dtype=torch.float64)
+                            #         uu = u.to(dot_num.device, dtype=torch.float64)
+                            #         dot_num = dot_num + torch.sum(zz * uu)
+                            #     coeff = float(dot_num.item()) / (dir_norm * dir_norm + eps_den)
+                            #     for i in range(len(noise_list)):
+                            #         noise_list[i] = noise_list[i] - coeff * dirs[i]
                             # 归一化噪声到目标能量
                             noise_norm_sq = torch.zeros(1, device=compute_device, dtype=torch.float64)
                             for z in noise_list:
@@ -651,7 +668,8 @@ class ZOFLClient(fl.client.NumPyClient):
                 for p, u in zip(self.trainable_params, dirs):
                     p.data.add_(sign * epsilon * u.to(p.device))
                 try:
-                    loss_value, _, tokens_used = _compute_loss_current()
+                    # 使用固定的评估 batch，保证 lp / lm 对同一批数据进行评估
+                    loss_value, _, tokens_used = _compute_loss_current(zo_eval_batches)
                     return loss_value, int(tokens_used)
                 finally:
                     # revert
@@ -700,23 +718,30 @@ class ZOFLClient(fl.client.NumPyClient):
                     for j, u in enumerate(dirs):
                         grad_est_paramwise[j].add_(c * u.to(device=grad_est_paramwise[j].device, dtype=grad_est_paramwise[j].dtype))
 
-                def _compute_loss_with_temp_step(grad_list: List[torch.Tensor], step_size: float) -> Tuple[float, int, int]:
+                def _compute_loss_with_temp_step(
+                    grad_list: List[torch.Tensor],
+                    step_size: float,
+                ) -> Tuple[float, int, int]:
                     for p, g in zip(self.trainable_params, grad_list):
                         if g is None:
                             continue
                         p.data.add_(-step_size * g.to(p.device, dtype=p.dtype))
                     try:
-                        return _compute_loss_current()
+                        # baseline 评估也复用与 lp / lm 相同的 batch，减少噪声
+                        return _compute_loss_current(zo_eval_batches)
                     finally:
                         for p, g in zip(self.trainable_params, grad_list):
                             if g is None:
                                 continue
                             p.data.add_(step_size * g.to(p.device, dtype=p.dtype))
 
-                baseline_loss, baseline_steps, baseline_tokens = _compute_loss_with_temp_step(grad_est_paramwise, float(self.lr))
+                baseline_loss, baseline_steps, baseline_tokens = _compute_loss_with_temp_step(
+                    grad_est_paramwise,
+                    float(self.lr),
+                )
             else:
                 # 无有效方向时退回原始评估
-                baseline_loss, baseline_steps, baseline_tokens = _compute_loss_current()
+                baseline_loss, baseline_steps, baseline_tokens = _compute_loss_current(zo_eval_batches)
             if count_tokens_enabled:
                 tokens_this_round += int(baseline_tokens)
 

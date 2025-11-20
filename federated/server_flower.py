@@ -57,7 +57,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         min_available_clients: int,
         candidate_pool: int = 128,
         topk: int = 8,
-        dir_count: int = 4,
+        dir_count: int = 1,
         epsilon: float = 1e-4,
         server_lr: float = 1e-6,
         device: str = "cuda",
@@ -105,7 +105,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         # Instruct 方向相似度目标（server 也用同一目标生成方向）
         self.instruct_cosine_target: float = 0.9
         # 为 weak 客户端注入的“微小能量噪声”占比（相对方向能量），如 0.01 表示 1%
-        self.instruct_noise_energy_ratio: float = 0.01
+        self.instruct_noise_energy_ratio: float = 1e-12
         # server-side eval
         self.server_eval_enable = bool(server_eval_enable)
         self.server_eval_batch_size = int(server_eval_batch_size)
@@ -995,7 +995,7 @@ class ServerSideZOStrategy(fl.server.strategy.FedAvg):
         cfg["zo_server_side"] = True
         cfg["zo_dir_seeds_json"] = json.dumps(self._make_dir_seeds(rnd))
         cfg["zo_epsilon"] = float(self.epsilon)
-        cfg["zo_eval_steps"] = 1  # 单步评估以节省通信/计算
+        cfg["zo_eval_steps"] = 4 # 单步评估以节省通信/计算
         return cfg
 
     def aggregate_fit(
