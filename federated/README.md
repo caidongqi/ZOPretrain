@@ -87,3 +87,14 @@ python federated/client_flower.py \
 - 服务端 ZO：服务端产生随机方向种子并下发，客户端仅做 f(x±εu) 评估，返回标量导数列表；服务端重建方向并用选定优化器（SGD/Adam/Muon）更新全局参数。
 - 客户端本地 ZO：客户端以 `--client_zo_q` 采样方向估计梯度并本地更新（手动 SGD 或指定优化器）；常规 FedAvg 聚合参数。
 - 客户端与服务器仅交换“可训练参数子集”的权重；默认 `scope=reduced` 以降通信成本。
+
+
+# 在当前 shell 里关闭所有常见代理变量
+unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy ALL_PROXY all_proxy
+
+# 或者如果你有 NO_PROXY，把 127.0.0.1 和 localhost 加进去：
+export NO_PROXY=127.0.0.1,localhost
+export no_proxy=127.0.0.1,localhost
+
+# 然后再跑
+bash federated_parallel_sweep.sh

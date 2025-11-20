@@ -22,7 +22,7 @@
         "--instruct_enable",
         "--instruct_candidate_pool", "64",
         "--instruct_topk", "4",
-        "--instruct_dir_count", "2",
+        "--instruct_dir_count", "1",
         "--instruct_eval_steps", "1",
         "--server_zo_epsilon", "1e-4",
         "--server_zo_lr", "1e-6",
@@ -33,7 +33,7 @@
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "0",
+        "CUDA_VISIBLE_DEVICES": "7",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
@@ -73,7 +73,7 @@
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "0",
+        "CUDA_VISIBLE_DEVICES": "7",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
@@ -113,7 +113,7 @@
       ],
       "env": {
         "PYTHONPATH": "/data/pc/ZOPretrain",
-        "CUDA_VISIBLE_DEVICES": "0",
+        "CUDA_VISIBLE_DEVICES": "7",
         "FLWR_LOGLEVEL": "DEBUG",
         "NO_PROXY": "127.0.0.1,localhost",
         "no_proxy": "127.0.0.1,localhost",
