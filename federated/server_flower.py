@@ -26,9 +26,9 @@ from federated.data_utils import load_or_build_examples
 from reproduce_zo_paper import create_model
 
 # 默认缓存目录（与客户端保持一致），避免重复下载
-os.environ.setdefault("HF_HOME", "/data/pc/ZOPretrain/cache")
-os.environ.setdefault("TRANSFORMERS_CACHE", "/data/pc/ZOPretrain/cache/hf")
-os.environ.setdefault("HF_DATASETS_CACHE", "/data/pc/ZOPretrain/cache/hf")
+os.environ.setdefault("HF_HOME", "cache")
+os.environ.setdefault("TRANSFORMERS_CACHE", "cache/hf")
+os.environ.setdefault("HF_DATASETS_CACHE", "cache/hf")
 
 def resolve_runtime_device(device_pref: str) -> Tuple[str, torch.device, str]:
     prefers_cuda = device_pref != "cpu"
@@ -220,7 +220,7 @@ class InstructFLStrategy(fl.server.strategy.FedAvg):
         if self._eval_tokenizer is None:
             self._eval_tokenizer = AutoTokenizer.from_pretrained(
                 "gpt2",
-                cache_dir=os.environ.get("TRANSFORMERS_CACHE", "/data/pc/ZOPretrain/cache/hf"),
+                cache_dir=os.environ.get("TRANSFORMERS_CACHE", "cache/hf"),
                 local_files_only=os.environ.get("TRANSFORMERS_OFFLINE", "") == "1",
             )
             if self._eval_tokenizer.pad_token is None:

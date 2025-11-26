@@ -1,0 +1,3 @@
+Timestamp,CPU_Usage(%),Memory_Usage(%),Net_Sent(Bytes),Net_Recv(Bytes),Disk_Read(Bytes),Disk_Write(Bytes),Battery_Percent
+13:32:56,0.0,71.0,1024,34816,0,0,48
+13:33:01,28.3,72.6,27723776,79275008,5644288,2826240,48
